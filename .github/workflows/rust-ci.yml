@@ -85,12 +85,19 @@ jobs:
           workspaces: APIRust
       - run: cargo llvm-cov --cobertura --output-path coverage.xml
 
-      - name: Reporter le pourcentage dans le README
+      - name: Reporter le badge de couverture dans le README
         working-directory: .
         run: |
           rate=$(grep -oP 'line-rate="\K[0-9.]+' APIRust/coverage.xml | head -1)
           pct=$(awk -v r="$rate" 'BEGIN { printf "%.1f", r * 100 }')
-          sed -i "s/<!-- coverage:start -->.*<!-- coverage:end -->/<!-- coverage:start -->${pct} %<!-- coverage:end -->/" README.md
+          color=$(awk -v p="$pct" 'BEGIN {
+            if (p >= 90) print "brightgreen";
+            else if (p >= 75) print "yellow";
+            else if (p >= 50) print "orange";
+            else print "red";
+          }')
+          badge="https://img.shields.io/badge/couverture_API-${pct}%25-${color}"
+          sed -i "s|<!-- coverage:start -->.*<!-- coverage:end -->|<!-- coverage:start -->![Couverture des tests (API Rust)](${badge})<!-- coverage:end -->|" README.md
           rm APIRust/coverage.xml
 
       - uses: stefanzweifel/git-auto-commit-action@v5
