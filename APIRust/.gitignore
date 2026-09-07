@@ -1,2 +1,4 @@
 /target
 /cache
+/coverage.xml
+/lcov.info

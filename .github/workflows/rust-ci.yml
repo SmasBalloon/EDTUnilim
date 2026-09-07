@@ -64,3 +64,36 @@ jobs:
         with:
           workspaces: APIRust
       - run: cargo build --release
+
+  coverage:
+    name: Couverture de tests
+    runs-on: ubuntu-latest
+    needs: test
+    # Uniquement sur master : une PR ne doit pas pousser de commit, surtout
+    # venant d'un fork qui n'a pas les droits d'écriture.
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: APIRust
+      - run: cargo llvm-cov --cobertura --output-path coverage.xml
+
+      - name: Reporter le pourcentage dans le README
+        working-directory: .
+        run: |
+          rate=$(grep -oP 'line-rate="\K[0-9.]+' APIRust/coverage.xml | head -1)
+          pct=$(awk -v r="$rate" 'BEGIN { printf "%.1f", r * 100 }')
+          sed -i "s/<!-- coverage:start -->.*<!-- coverage:end -->/<!-- coverage:start -->${pct} %<!-- coverage:end -->/" README.md
+          rm APIRust/coverage.xml
+
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: mettre à jour la couverture de tests dans le README [skip ci]"
+          file_pattern: README.md

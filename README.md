@@ -9,6 +9,9 @@ PDF publiés par le département et servis en JSON, avec une interface web.
 | [`frontend/`](frontend) | l'interface SolidJS : semaine par colonnes de jours, en grille ou en liste |
 | [`api-edt-unilim/`](api-edt-unilim) | la version NestJS précédente |
 
+**Couverture des tests (API Rust) :** <!-- coverage:start -->91.3 %<!-- coverage:end --> des lignes
+(`cargo llvm-cov`, mise à jour automatiquement à chaque push sur `master`).
+
 ## Tout lancer avec Docker
 
 ```bash
