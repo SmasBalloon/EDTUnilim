@@ -1,0 +1,155 @@
+//! Le cache : reprise en mémoire, écriture disque et repli quand l'amont
+//! est indisponible.
+
+use std::time::Duration;
+
+use edt_unilim_api::config::Config;
+use edt_unilim_api::error::ApiError;
+use edt_unilim_api::store::Store;
+use wiremock::matchers::{header, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
+const A1_S3: &[u8] = include_bytes!("fixtures/A1_S3.pdf");
+
+fn config(upstream: &MockServer, cache_dir: &std::path::Path) -> Config {
+    Config {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        upstream: upstream.uri(),
+        cache_dir: cache_dir.to_path_buf(),
+        refresh_interval: Duration::from_secs(3600),
+        upstream_timeout: Duration::from_secs(5),
+    }
+}
+
+#[tokio::test]
+async fn rejects_an_unknown_year_without_any_network_call() {
+    let server = MockServer::start().await;
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let store = Store::new(&config(&server, cache_dir.path())).expect("store construit");
+
+    let error = store.weeks(9).await.unwrap_err();
+    assert!(matches!(error, ApiError::UnknownYear(9)));
+    // Aucun stub n'a été posé : un appel réseau aurait fait échouer le test.
+}
+
+#[tokio::test]
+async fn lists_weeks_from_the_upstream_index() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/A1/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(r#"<a href="A1_S12.pdf">A1_S12.pdf</a> <a href="A1_S3.pdf">A1_S3.pdf</a>"#),
+        )
+        .mount(&server)
+        .await;
+
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let store = Store::new(&config(&server, cache_dir.path())).expect("store construit");
+
+    let weeks = store.weeks(1).await.expect("index lisible");
+    assert_eq!(*weeks, vec![3, 12]);
+}
+
+#[tokio::test]
+async fn fetches_and_caches_a_timetable() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A1_S3).insert_header("etag", "\"v1\""))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let store = Store::new(&config(&server, cache_dir.path())).expect("store construit");
+
+    let first = store.timetable(1, 3).await.expect("PDF analysable");
+    assert_eq!(first.timetable.week, 3);
+
+    // Un deuxième appel doit venir du cache mémoire : le mock n'accepte
+    // qu'une seule requête (`.expect(1)`), un second appel réseau ferait
+    // échouer la vérification au moment où le serveur s'arrête.
+    let second = store.timetable(1, 3).await.expect("servi depuis le cache");
+    assert_eq!(second.fetched_at, first.fetched_at);
+
+    let cached_pdf = cache_dir.path().join("A1").join("A1_S3.pdf");
+    assert!(cached_pdf.exists(), "le PDF téléchargé doit être écrit sur disque");
+}
+
+#[tokio::test]
+async fn reports_an_unknown_week_when_upstream_returns_404() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S45.pdf"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let store = Store::new(&config(&server, cache_dir.path())).expect("store construit");
+
+    let error = store.timetable(1, 45).await.unwrap_err();
+    assert!(matches!(error, ApiError::UnknownWeek { year: 1, week: 45 }));
+}
+
+#[tokio::test]
+async fn falls_back_to_the_disk_cache_when_upstream_is_unavailable() {
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+
+    // Premier passage : l'amont répond, le PDF est écrit sur disque.
+    {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/A1/A1_S3.pdf"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(A1_S3))
+            .mount(&server)
+            .await;
+        let store = Store::new(&config(&server, cache_dir.path())).expect("store construit");
+        store.timetable(1, 3).await.expect("premier téléchargement réussi");
+    }
+
+    // Second passage, store neuf (cache mémoire vide) : l'amont est en panne,
+    // le service doit se rabattre sur le PDF déjà sur disque.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+    let store = Store::new(&config(&server, cache_dir.path())).expect("store construit");
+
+    let entry = store.timetable(1, 3).await.expect("repli sur le cache disque");
+    assert_eq!(entry.timetable.week, 3);
+}
+
+#[tokio::test]
+async fn keeps_the_cached_entry_when_refresh_finds_nothing_new() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/A1/"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(""))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .and(header("if-none-match", "\"v1\""))
+        .respond_with(ResponseTemplate::new(304))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A1_S3).insert_header("etag", "\"v1\""))
+        .mount(&server)
+        .await;
+
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let store = Store::new(&config(&server, cache_dir.path())).expect("store construit");
+
+    let before = store.timetable(1, 3).await.expect("premier téléchargement réussi").fetched_at;
+
+    store.refresh().await;
+
+    let after = store.timetable(1, 3).await.expect("toujours en cache").fetched_at;
+    assert_eq!(before, after, "un 304 ne doit pas remplacer l'entrée en cache");
+}

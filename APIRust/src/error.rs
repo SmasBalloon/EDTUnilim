@@ -62,3 +62,59 @@ impl IntoResponse for ApiError {
         (self.status(), Json(body)).into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::body::to_bytes;
+
+    use super::*;
+
+    async fn body_json(error: ApiError) -> (StatusCode, serde_json::Value) {
+        let response = error.into_response();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.expect("corps lisible");
+        (status, serde_json::from_slice(&bytes).expect("corps JSON"))
+    }
+
+    #[tokio::test]
+    async fn renders_an_unknown_year_as_404() {
+        let (status, body) = body_json(ApiError::UnknownYear(9)).await;
+
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["error"], "unknown_year");
+        assert!(body["message"].as_str().unwrap().contains('9'));
+    }
+
+    #[tokio::test]
+    async fn renders_an_unknown_week_as_404() {
+        let (status, body) = body_json(ApiError::UnknownWeek { year: 1, week: 45 }).await;
+
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["error"], "unknown_week");
+    }
+
+    #[tokio::test]
+    async fn renders_an_unknown_route_as_404() {
+        let (status, body) = body_json(ApiError::UnknownRoute).await;
+
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["error"], "unknown_route");
+    }
+
+    #[tokio::test]
+    async fn renders_a_bad_request_as_400() {
+        let (status, body) = body_json(ApiError::BadRequest("semaine invalide".to_owned())).await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], "bad_request");
+        assert_eq!(body["message"], "semaine invalide");
+    }
+
+    #[tokio::test]
+    async fn renders_an_upstream_unexpected_response_as_502() {
+        let (status, body) = body_json(ApiError::UpstreamUnexpected).await;
+
+        assert_eq!(status, StatusCode::BAD_GATEWAY);
+        assert_eq!(body["error"], "upstream_unexpected");
+    }
+}

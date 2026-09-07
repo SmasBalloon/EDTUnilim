@@ -21,6 +21,9 @@ time = { version = "0.3", features = ["formatting", "parsing", "macros", "serde-
 
 [dev-dependencies]
 axum-test = "17"
+serial_test = "3.5.0"
+tempfile = "3.27.0"
+wiremock = "0.6.5"
 
 [profile.release]
 lto = "thin"

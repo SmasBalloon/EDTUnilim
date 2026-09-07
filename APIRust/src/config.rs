@@ -61,3 +61,95 @@ fn duration(name: &'static str, default: Duration) -> Result<Duration, ConfigErr
         Some(value) => value.parse().map(Duration::from_secs).map_err(|_| ConfigError::Invalid(name, value)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serial_test::serial;
+
+    use super::*;
+
+    /// Les variables lues par `Config` sont globales au process ; les tests
+    /// qui les manipulent doivent donc s'exécuter en série.
+    fn clear_env() {
+        for name in [
+            "EDT_BIND",
+            "EDT_UPSTREAM",
+            "EDT_CACHE_DIR",
+            "EDT_REFRESH_SECONDS",
+            "EDT_UPSTREAM_TIMEOUT_SECONDS",
+        ] {
+            std::env::remove_var(name);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn falls_back_to_defaults() {
+        clear_env();
+        let config = Config::from_env().expect("défauts valides");
+
+        assert_eq!(config.bind.to_string(), DEFAULT_BIND);
+        assert_eq!(config.upstream, DEFAULT_UPSTREAM);
+        assert_eq!(config.cache_dir, PathBuf::from(DEFAULT_CACHE_DIR));
+        assert_eq!(config.refresh_interval, DEFAULT_REFRESH);
+        assert_eq!(config.upstream_timeout, DEFAULT_TIMEOUT);
+    }
+
+    #[test]
+    #[serial]
+    fn reads_overrides_from_the_environment() {
+        clear_env();
+        std::env::set_var("EDT_BIND", "127.0.0.1:8080");
+        std::env::set_var("EDT_UPSTREAM", "https://example.test/edt/");
+        std::env::set_var("EDT_CACHE_DIR", "/tmp/edt-cache");
+        std::env::set_var("EDT_REFRESH_SECONDS", "60");
+        std::env::set_var("EDT_UPSTREAM_TIMEOUT_SECONDS", "5");
+
+        let config = Config::from_env().expect("configuration valide");
+
+        assert_eq!(config.bind.to_string(), "127.0.0.1:8080");
+        // La barre oblique finale est retirée pour ne pas la doubler dans les URL construites.
+        assert_eq!(config.upstream, "https://example.test/edt");
+        assert_eq!(config.cache_dir, PathBuf::from("/tmp/edt-cache"));
+        assert_eq!(config.refresh_interval, Duration::from_secs(60));
+        assert_eq!(config.upstream_timeout, Duration::from_secs(5));
+
+        clear_env();
+    }
+
+    #[test]
+    #[serial]
+    fn treats_blank_variables_as_absent() {
+        clear_env();
+        std::env::set_var("EDT_UPSTREAM", "   ");
+
+        let config = Config::from_env().expect("défauts valides");
+
+        assert_eq!(config.upstream, DEFAULT_UPSTREAM);
+        clear_env();
+    }
+
+    #[test]
+    #[serial]
+    fn rejects_an_invalid_bind_address() {
+        clear_env();
+        std::env::set_var("EDT_BIND", "not-an-address");
+
+        let error = Config::from_env().unwrap_err();
+        assert!(matches!(error, ConfigError::Invalid("EDT_BIND", _)));
+
+        clear_env();
+    }
+
+    #[test]
+    #[serial]
+    fn rejects_a_non_numeric_duration() {
+        clear_env();
+        std::env::set_var("EDT_REFRESH_SECONDS", "bientôt");
+
+        let error = Config::from_env().unwrap_err();
+        assert!(matches!(error, ConfigError::Invalid("EDT_REFRESH_SECONDS", _)));
+
+        clear_env();
+    }
+}

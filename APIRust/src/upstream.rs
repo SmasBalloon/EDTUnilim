@@ -105,6 +105,9 @@ fn parse_week_links(html: &str, year: u8) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
     use super::*;
 
     #[test]
@@ -120,5 +123,73 @@ mod tests {
     #[test]
     fn ignores_unrelated_links() {
         assert!(parse_week_links(r#"<a href="A1_Sx.pdf">x</a>"#, 1).is_empty());
+    }
+
+    fn upstream(server: &MockServer) -> Upstream {
+        Upstream::new(server.uri(), Duration::from_secs(5)).expect("client construit")
+    }
+
+    #[tokio::test]
+    async fn list_weeks_fails_when_the_index_is_missing() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/A1/"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        assert!(upstream(&server).list_weeks(1).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn fetch_week_captures_validators_from_headers() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/A1/A1_S3.pdf"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(b"%PDF-1.4".to_vec())
+                    .insert_header("etag", "\"abc\"")
+                    .insert_header("last-modified", "Tue, 01 Sep 2026 00:00:00 GMT"),
+            )
+            .mount(&server)
+            .await;
+
+        let fetch =
+            upstream(&server).fetch_week(1, 3, &Validators::default()).await.expect("réponse lisible");
+        let Fetch::Fresh(document) = fetch else { panic!("un document était attendu") };
+
+        assert_eq!(document.bytes, b"%PDF-1.4");
+        assert_eq!(document.validators.etag.as_deref(), Some("\"abc\""));
+        assert_eq!(document.validators.last_modified.as_deref(), Some("Tue, 01 Sep 2026 00:00:00 GMT"));
+    }
+
+    #[tokio::test]
+    async fn fetch_week_sends_known_validators_and_accepts_a_304() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/A1/A1_S3.pdf"))
+            .and(header("if-none-match", "\"abc\""))
+            .and(header("if-modified-since", "hier"))
+            .respond_with(ResponseTemplate::new(304))
+            .mount(&server)
+            .await;
+
+        let known = Validators { etag: Some("\"abc\"".to_owned()), last_modified: Some("hier".to_owned()) };
+        let fetch = upstream(&server).fetch_week(1, 3, &known).await.expect("réponse lisible");
+
+        assert!(matches!(fetch, Fetch::Unchanged));
+    }
+
+    #[tokio::test]
+    async fn fetch_week_fails_on_a_server_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/A1/A1_S3.pdf"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+
+        assert!(upstream(&server).fetch_week(1, 3, &Validators::default()).await.is_err());
     }
 }
