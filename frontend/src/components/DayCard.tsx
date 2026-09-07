@@ -24,7 +24,12 @@ function buildRows(courses: Course[]): Row[] {
     const previous = sorted[index - 1];
     if (previous) {
       const gap = toMinutes(course.start) - toMinutes(previous.end);
-      if (gap > 0) rows.push({ kind: 'gap', minutes: gap });
+      // Un trou se lit comme une parenthèse : l'heure où l'on sort, le temps
+      // libre, puis l'heure où l'on reprend.
+      if (gap > 0) {
+        rows.push({ kind: 'time', at: previous.end });
+        rows.push({ kind: 'gap', minutes: gap });
+      }
     }
     rows.push({ kind: 'time', at: course.start });
     rows.push({ kind: 'course', course });
