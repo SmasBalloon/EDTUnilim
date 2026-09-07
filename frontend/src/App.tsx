@@ -1,4 +1,5 @@
 import { Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount } from 'solid-js';
+import { ChevronLeft, ChevronRight, Download, Settings } from 'lucide-solid';
 
 import { ApiError, fetchWeek, fetchYears, type Course } from './lib/api';
 import { groupBases, groupLabel, weekDays } from './lib/groups';
@@ -166,15 +167,17 @@ export function App() {
                     }
                   }}
                 >
+                  <Download size={16} aria-hidden="true" />
                   .ics
                 </button>
                 <button
                   type="button"
                   class="button button--on-accent"
                   title="Réglages"
+                  aria-label="Réglages"
                   onClick={() => setShowSettings(true)}
                 >
-                  ⚙
+                  <Settings size={16} aria-hidden="true" />
                 </button>
               </div>
             </header>
@@ -218,7 +221,7 @@ export function App() {
                     disabled={weeks().indexOf(week() ?? -1) <= 0}
                     aria-label="Semaine précédente"
                   >
-                    ‹
+                    <ChevronLeft size={18} aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -227,7 +230,7 @@ export function App() {
                     disabled={weeks().indexOf(week() ?? -1) >= weeks().length - 1}
                     aria-label="Semaine suivante"
                   >
-                    ›
+                    <ChevronRight size={18} aria-hidden="true" />
                   </button>
                 </div>
               </div>

@@ -1,4 +1,5 @@
 import { For, Show, type Component } from 'solid-js';
+import { X } from 'lucide-solid';
 
 import { clearCache } from '../lib/api';
 import { settings, update, type Theme, type ViewMode } from '../lib/settings';
@@ -30,7 +31,7 @@ export const SettingsSheet: Component<Props> = (props) => (
         <header class="sheet__header">
           <h2 class="sheet__title">Réglages</h2>
           <button type="button" class="button" onClick={props.onClose} aria-label="Fermer">
-            ✕
+            <X size={16} aria-hidden="true" />
           </button>
         </header>
 

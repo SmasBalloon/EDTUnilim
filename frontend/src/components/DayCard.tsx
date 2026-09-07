@@ -1,4 +1,5 @@
 import { For, Show, createMemo, type Component } from 'solid-js';
+import { Hourglass } from 'lucide-solid';
 
 import type { Course } from '../lib/api';
 import { KIND_LABEL } from '../lib/layout';
@@ -77,7 +78,7 @@ const Marker: Component<{ row: Row }> = (props) => (
     when={props.row.kind === 'time' ? props.row.at : null}
     fallback={
       <p class="gap-note">
-        <span aria-hidden="true">⧗</span>
+        <Hourglass size={14} aria-hidden="true" />
         {props.row.kind === 'gap' ? `${humanDuration(props.row.minutes)} de vide` : ''}
       </p>
     }

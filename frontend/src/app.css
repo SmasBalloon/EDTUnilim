@@ -393,6 +393,11 @@ body {
   cursor: default;
 }
 
+/* Les icônes gardent leur gabarit même dans un bouton étroit. */
+.button svg {
+  flex: none;
+}
+
 .button--block {
   width: 100%;
 }

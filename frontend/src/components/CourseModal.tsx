@@ -1,4 +1,5 @@
 import { Show, type Component } from 'solid-js';
+import { X } from 'lucide-solid';
 
 import type { Course } from '../lib/api';
 import { groupLabel } from '../lib/groups';
@@ -31,7 +32,7 @@ export const CourseModal: Component<Props> = (props) => (
               </p>
             </div>
             <button type="button" class="button" onClick={props.onClose} aria-label="Fermer">
-              ✕
+              <X size={16} aria-hidden="true" />
             </button>
           </header>
 
