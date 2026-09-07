@@ -53,6 +53,15 @@ jobs:
           workspaces: APIRust
       - run: cargo test --all-targets
 
+  audit:
+    name: Audit de sécurité
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-audit
+      - run: cargo audit
+
   build:
     name: Build (release)
     runs-on: ubuntu-latest
