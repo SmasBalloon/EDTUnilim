@@ -111,6 +111,11 @@
 html,
 body {
   height: 100%;
+  /*
+   * Le geste latéral appartient à l'application : sans cela, le navigateur
+   * l'interprète comme un retour en arrière et quitte la page.
+   */
+  overscroll-behavior: none;
 }
 
 body {
@@ -121,7 +126,6 @@ body {
   font-optical-sizing: auto;
   text-rendering: optimizeLegibility;
   -webkit-tap-highlight-color: transparent;
-  overscroll-behavior-y: none;
 }
 
 :focus-visible {
@@ -173,6 +177,11 @@ body {
   /* Le défilement latéral s'arrête proprement sur un jour. */
   scroll-snap-type: x proximity;
   scroll-padding-left: var(--space-edge);
+  /*
+   * Sans cela, un balayage vers la droite est capté par le navigateur comme un
+   * retour en arrière : la page disparaît au lieu de changer de jour.
+   */
+  overscroll-behavior: contain;
 }
 
 .app__footer {
@@ -697,6 +706,54 @@ body {
   font-size: 0.875rem;
 }
 
+/* --- Sélecteur de jour (écrans étroits) ----------------------------------- */
+
+.day-tabs {
+  display: flex;
+  gap: 0.375rem;
+  padding: 0 var(--space-edge) 0.875rem;
+}
+
+.day-tab {
+  flex: 1;
+  display: grid;
+  gap: 0.125rem;
+  justify-items: center;
+  padding: 0.375rem 0.25rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.day-tab__name {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.day-tab__date {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Le jour du jour reste repérable, même quand un autre est ouvert. */
+.day-tab--today {
+  color: var(--color-accent);
+  border-color: color-mix(in oklab, var(--color-accent) 40%, var(--color-line));
+}
+
+.day-tab[aria-selected="true"] {
+  border-color: transparent;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
 /* --- Semaine en liste ----------------------------------------------------- */
 
 .day-strip {
@@ -713,14 +770,23 @@ body {
 }
 
 /*
- * Sur téléphone, la journée suivante dépasse volontairement du bord : c'est ce
- * qui annonce le défilement latéral, sans avoir à l'écrire.
+ * En jour unique, le geste horizontal est celui de l'application : on interdit
+ * le panoramique latéral au navigateur, sinon il le prend pour un retour en
+ * arrière et quitte la page avant même que le code ne voie le toucher.
  */
-@media (max-width: 30rem) {
-  .day-strip__column {
-    flex-basis: 64vw;
-    min-width: 64vw;
-  }
+.week-view--single {
+  touch-action: pan-y;
+}
+
+/* Un seul jour à l'écran : il prend toute la largeur. */
+.week-view--single .day-strip__column {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.week-view--single .week-grid {
+  --column-min: 0;
+  min-width: 100%;
 }
 
 .day-card {
