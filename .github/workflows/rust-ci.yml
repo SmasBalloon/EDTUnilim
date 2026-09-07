@@ -109,7 +109,7 @@ jobs:
           sed -i "s|<!-- coverage:start -->.*<!-- coverage:end -->|<!-- coverage:start -->![Couverture des tests](${badge})<!-- coverage:end -->|" README.md
           rm APIRust/coverage.xml
 
-      - uses: stefanzweifel/git-auto-commit-action@v5
+      - uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore: mettre à jour la couverture de tests dans le README [skip ci]"
           file_pattern: README.md
