@@ -1,6 +1,7 @@
 //! Export de la semaine affichée au format iCalendar.
 
 import type { Course, Week } from './api';
+import { KIND_LABEL } from './layout';
 import { toMinutes } from './time';
 
 function stamp(date: string, clock: string): string {
@@ -28,10 +29,12 @@ function fold(line: string): string {
   return chunks.join('\r\n ');
 }
 
+/** `R3.01 - Développement web / TD / Monédière T.`, les parties absentes en moins. */
 function summary(course: Course): string {
-  const label = course.title ?? course.resource?.name ?? course.resource?.code ?? 'Cours';
   const code = course.resource?.code;
-  return code && !label.startsWith(code) ? `${code} · ${label}` : label;
+  const label = course.resource?.name ?? course.title;
+  const resource = [code, label].filter(Boolean).join(' - ') || 'Cours';
+  return [resource, KIND_LABEL[course.kind], course.teacher].filter(Boolean).join(' / ');
 }
 
 function event(course: Course, index: number, week: Week): string[] {
