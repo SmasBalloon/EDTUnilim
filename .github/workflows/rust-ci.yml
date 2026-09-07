@@ -97,7 +97,7 @@ jobs:
             else print "red";
           }')
           badge="https://img.shields.io/badge/couverture_API-${pct}%25-${color}"
-          sed -i "s|<!-- coverage:start -->.*<!-- coverage:end -->|<!-- coverage:start -->![Couverture des tests (API Rust)](${badge})<!-- coverage:end -->|" README.md
+          sed -i "s|<!-- coverage:start -->.*<!-- coverage:end -->|<!-- coverage:start -->![Couverture des tests](${badge})<!-- coverage:end -->|" README.md
           rm APIRust/coverage.xml
 
       - uses: stefanzweifel/git-auto-commit-action@v5
