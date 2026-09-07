@@ -1,0 +1,1082 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Feuille de style de l'application.
+
+   1. Jetons          les valeurs brutes : couleurs, rayons, ombres, tailles
+   2. Thèmes          clair et sombre, un simple jeu de jetons réécrits
+   3. Base            éléments HTML, focus, défilement
+   4. Mise en page    l'ossature de l'écran
+   5. Composants      une section par élément d'interface
+   ========================================================================== */
+
+/* Le thème est posé en classe sur <html> par le réglage d'apparence. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* --------------------------------------------------------------------------
+   1. Jetons
+   -------------------------------------------------------------------------- */
+
+@theme {
+  /*
+   * IBM Plex Sans : dessinée pour la documentation technique, avec des chiffres
+   * tabulaires nets — un emploi du temps est d'abord une grille de nombres.
+   * Empaquetée avec l'application, donc lisible hors ligne et sans requête
+   * vers un tiers.
+   */
+  --font-sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+
+  /* Surfaces, du fond de page à l'élément posé dessus. */
+  --color-bg: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-elevated: #edeff3;
+  --color-line: #e1e4ea;
+
+  /* Texte. */
+  --color-text: #14171c;
+  --color-muted: #5e6675;
+
+  /* Accent unique de l'application. */
+  --color-accent: #e5303a;
+  --color-on-accent: #ffffff;
+
+  /* Une taille de plus que Tailwind, pour les mentions de la grille. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1.4;
+
+  --radius-card: 0.875rem;
+  --radius-control: 0.625rem;
+
+  /* Marge latérale et interstice, qui suivent la largeur de l'écran. */
+  --space-edge: clamp(0.75rem, 2.5vw, 1.25rem);
+  --space-gap: clamp(0.625rem, 2vw, 0.875rem);
+
+  --shadow-card: 0 14px 30px -24px rgb(0 0 0 / 0.55);
+  --shadow-pop: 0 18px 36px -14px rgb(0 0 0 / 0.45);
+}
+
+:root {
+  /*
+   * Nature d'un cours, d'après les couleurs du PDF du département : jaune pour
+   * les CM, orange pour les TD, bleu pour les TP, vert pour les SAÉ. Le reste
+   * (contrôles) demeure neutre, sa pastille le nomme.
+   */
+  --kind-cm: #b8860b;
+  --kind-td: #d1670f;
+  --kind-tp: #2563c9;
+  --kind-sae: #14804a;
+  --kind-other: #6b7280;
+
+  /* Dosages des mélanges appliqués à ces couleurs. */
+  --kind-fill: 10%;
+  --kind-edge: 62%;
+  --kind-ink: 78%;
+
+  color-scheme: light;
+}
+
+/* --------------------------------------------------------------------------
+   2. Thèmes
+   -------------------------------------------------------------------------- */
+
+.dark {
+  --color-bg: #0e1013;
+  --color-surface: #16191e;
+  --color-elevated: #1e222a;
+  --color-line: #272c35;
+
+  --color-text: #eceff3;
+  --color-muted: #8a93a2;
+
+  --color-accent: #ff4b4b;
+  --color-on-accent: #ffffff;
+
+  --kind-cm: #ffd75e;
+  --kind-td: #ff9f52;
+  --kind-tp: #6fb0ff;
+  --kind-sae: #5fd08a;
+  --kind-other: #9aa1ac;
+
+  --kind-fill: 14%;
+  --kind-edge: 76%;
+  --kind-ink: 88%;
+
+  color-scheme: dark;
+}
+
+/* --------------------------------------------------------------------------
+   3. Base
+   -------------------------------------------------------------------------- */
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+
+/* Au doigt, les commandes gagnent la hauteur qu'il faut pour être visées. */
+@media (pointer: coarse) {
+  .button,
+  .chip,
+  .segment__option {
+    min-height: 2.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   4. Mise en page
+   -------------------------------------------------------------------------- */
+
+/* L'écran occupe la fenêtre ; seule la zone centrale défile. */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow-x: hidden;
+}
+
+.app__timetable {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding-top: clamp(0.75rem, 3vw, 1.25rem);
+  /* Le défilement latéral s'arrête proprement sur un jour. */
+  scroll-snap-type: x proximity;
+  scroll-padding-left: var(--space-edge);
+}
+
+.app__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding: 0.5rem var(--space-edge);
+  border-top: 1px solid var(--color-line);
+  color: var(--color-muted);
+  font-size: var(--text-2xs);
+}
+
+.app__footer a {
+  margin-left: auto;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+/* Écran centré : chargement, premier lancement, message d'absence. */
+.centered {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 1.5rem;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   5. Composants
+   -------------------------------------------------------------------------- */
+
+/* --- Bandeau d'accueil ---------------------------------------------------- */
+
+/* Le bandeau laisse dépasser les cartes de tête sur sa hauteur. */
+.banner {
+  --overlap: clamp(1.75rem, 5vw, 2.75rem);
+
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding: clamp(0.625rem, 2.5vw, 1rem) var(--space-edge);
+  padding-bottom: calc(var(--overlap) + clamp(0.625rem, 2vw, 1rem));
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.banner__greeting {
+  margin: 0;
+  font-size: clamp(1.0625rem, 4vw, 1.25rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.banner__identity {
+  margin: 0.125rem 0 0;
+  font-size: 0.8125rem;
+  opacity: 0.85;
+}
+
+.banner__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-left: auto;
+}
+
+/* --- Cartes --------------------------------------------------------------- */
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* Les deux cartes de tête chevauchent le bas du bandeau. */
+.summary {
+  display: grid;
+  gap: var(--space-gap);
+  flex-shrink: 0;
+  margin-top: calc(-1 * clamp(1.75rem, 5vw, 2.75rem));
+  padding: 0 var(--space-edge);
+  position: relative;
+  z-index: 10;
+}
+
+@media (min-width: 60rem) {
+  .summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+}
+
+/* --- Carte d'état --------------------------------------------------------- */
+
+.status {
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+}
+
+.status__headline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-weight: 500;
+}
+
+.status__dot {
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+}
+
+.status__dot--idle {
+  background: var(--color-muted);
+}
+
+.status__next {
+  margin: 0.25rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+.accent {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+/* --- Carte de semaine ----------------------------------------------------- */
+
+.week-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-gap);
+  padding: 0.5rem 0.625rem 0.5rem 0.875rem;
+}
+
+.week-summary__info {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  min-width: 0;
+}
+
+.week-summary__number {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.week-summary__period {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.week-summary__workload {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--color-elevated);
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.week-summary__nav {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* --- Boutons -------------------------------------------------------------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 2.25rem;
+  min-width: 2.25rem;
+  padding: 0 0.625rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--color-elevated);
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.button--block {
+  width: 100%;
+}
+
+/* Bouton rond de navigation entre les semaines. */
+.button--round {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border-radius: 999px;
+  border-color: color-mix(in oklab, var(--color-accent) 65%, transparent);
+  background: color-mix(in oklab, var(--color-accent) 18%, transparent);
+  color: color-mix(in oklab, var(--color-accent) 85%, var(--color-text));
+  font-size: 1rem;
+}
+
+.button--round:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+/* Bouton posé sur le bandeau rouge. */
+.button--on-accent {
+  border-color: transparent;
+  background: rgb(255 255 255 / 0.18);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+
+.button--on-accent:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.3);
+}
+
+.button--on-accent[aria-pressed="true"] {
+  background: var(--color-on-accent);
+  color: var(--color-accent);
+}
+
+/* --- Pastilles ------------------------------------------------------------ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* Pastille de type : elle prend la couleur du cours qui la porte. */
+.badge--kind {
+  border: 1px solid color-mix(in oklab, var(--kind, var(--color-accent)) 60%, transparent);
+  background: color-mix(in oklab, var(--kind, var(--color-accent)) 16%, transparent);
+  color: color-mix(in oklab, var(--kind, var(--color-accent)) var(--kind-ink), var(--color-text));
+}
+
+/* Pastille pleine : salle, jour, mention « en cours ». */
+.badge--accent {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+/* --- Choix (puces, segments, options) ------------------------------------- */
+
+.chip {
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.chip:hover {
+  border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-line));
+}
+
+.chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.chip:disabled:hover {
+  border-color: var(--color-line);
+}
+
+.chip[aria-pressed="true"] {
+  border-color: color-mix(in oklab, var(--color-accent) 60%, transparent);
+  background: color-mix(in oklab, var(--color-accent) 16%, var(--color-surface));
+  color: color-mix(in oklab, var(--color-accent) 75%, var(--color-text));
+  font-weight: 600;
+}
+
+.segment {
+  display: inline-flex;
+  gap: 0.125rem;
+  padding: 0.125rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-elevated);
+}
+
+.segment__option {
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.7rem;
+  background: none;
+  border: 0;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.segment__option[aria-pressed="true"] {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* Option en pleine largeur, avec son explication. */
+.option {
+  display: block;
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.option[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-elevated);
+}
+
+.option__title {
+  display: block;
+  font-weight: 500;
+}
+
+.option__hint {
+  display: block;
+  margin-top: 0.125rem;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+
+/* --- Sections de formulaire ----------------------------------------------- */
+
+.field + .field {
+  margin-top: 1.25rem;
+}
+
+.field__label {
+  margin: 0 0 0.5rem;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.field__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.field__stack {
+  display: grid;
+  gap: 0.5rem;
+}
+
+/* --- Sélecteur de groupe -------------------------------------------------- */
+
+.picker {
+  display: grid;
+  gap: 1rem;
+}
+
+.picker__row {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.picker__label {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.picker__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* --- Feuille de réglages -------------------------------------------------- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.45);
+}
+
+@media (min-width: 40rem) {
+  .sheet-backdrop {
+    align-items: center;
+  }
+}
+
+.sheet {
+  width: 100%;
+  max-height: 85dvh;
+  overflow-y: auto;
+  padding: 1.25rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+  animation: sheet-rise 0.18s ease-out;
+}
+
+@media (min-width: 40rem) {
+  .sheet {
+    max-width: 32rem;
+    border-radius: var(--radius-card);
+  }
+}
+
+@keyframes sheet-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+}
+
+.sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.sheet__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.sheet__footer {
+  margin-top: 1.5rem;
+}
+
+/* --- Premier lancement ---------------------------------------------------- */
+
+.setup {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 1.25rem;
+}
+
+.setup__panel {
+  width: 100%;
+  max-width: 28rem;
+}
+
+.setup__title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.setup__intro {
+  margin: 0.375rem 0 1.75rem;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.setup__note {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+/* --- Semaine en liste ----------------------------------------------------- */
+
+.day-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-gap);
+  padding: 0 var(--space-edge) 1.5rem;
+}
+
+/*
+ * La colonne suit la largeur de l'écran : sur téléphone, la journée suivante
+ * dépasse volontairement du bord, ce qui annonce le défilement latéral.
+ */
+.day-strip__column {
+  flex: 1 0 clamp(14rem, 44vw, 19rem);
+  min-width: clamp(14rem, 44vw, 19rem);
+  scroll-snap-align: start;
+}
+
+.day-card {
+  position: relative;
+  margin-top: 0.75rem;
+  padding: 1.25rem 0;
+}
+
+.day-card--today {
+  border-color: var(--color-accent);
+}
+
+/* L'étiquette du jour est posée à cheval sur le bord supérieur. */
+.day-card__label {
+  position: absolute;
+  top: -0.875rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.day-card__empty,
+.day-card__total {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.day-card__empty {
+  padding: 0.5rem 1rem;
+}
+
+.day-card__total {
+  padding-top: 0.5rem;
+  font-size: var(--text-2xs);
+}
+
+/* Heure de début, prolongée par un filet jusqu'au bord de la carte. */
+.time-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.875rem;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-rule::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-line);
+}
+
+.gap-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+/* --- Cours en liste ------------------------------------------------------- */
+
+.course-row {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 0.875rem;
+  border: 0;
+  border-inline-start: 3px solid transparent;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.course-row:hover {
+  border-inline-start-color: color-mix(in oklab, var(--kind) 75%, transparent);
+  background: color-mix(in oklab, var(--kind) 9%, transparent);
+}
+
+.course-row__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.course-row__code {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.course-row__badges {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-left: auto;
+}
+
+.course-row__subject {
+  display: block;
+  margin: 0.25rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+/* --- Détail d'un cours, en modal ------------------------------------------ */
+
+.course-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.course-modal__day {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* « lundi 7 septembre » : seule l'initiale se capitalise en français. */
+.course-modal__day::first-letter {
+  text-transform: uppercase;
+}
+
+.course-modal__time {
+  margin: 0.125rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.course-modal__title {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.course-modal__code {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.course-modal__subject {
+  margin: 0.375rem 0 0;
+  font-size: 1rem;
+}
+
+.course-modal__facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.375rem 1rem;
+  margin: 1.25rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-line);
+  font-size: 0.875rem;
+}
+
+.course-modal__facts dt {
+  color: var(--color-muted);
+}
+
+.course-modal__facts dd {
+  margin: 0;
+}
+
+/* --- Semaine en grille ---------------------------------------------------- */
+
+/*
+ * Une colonne par jour, plus la colonne des heures. Les colonnes se partagent
+ * la largeur disponible sans jamais passer sous `--column-min` : la semaine
+ * reste entière, quitte à défiler horizontalement sur téléphone.
+ */
+.week-grid {
+  --gutter: clamp(2.25rem, 7vw, 3.25rem);
+  --column-min: clamp(8.5rem, 28vw, 11rem);
+
+  display: grid;
+  grid-template-columns: var(--gutter) repeat(var(--day-count), minmax(0, 1fr));
+  width: 100%;
+  min-width: calc(var(--gutter) + var(--day-count) * var(--column-min));
+}
+
+.week-grid__corner,
+.week-grid__day {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.week-grid__corner {
+  left: 0;
+  z-index: 30;
+}
+
+.week-grid__day {
+  padding: 0.5rem;
+  text-align: center;
+}
+
+.week-grid__day--today {
+  color: var(--color-accent);
+}
+
+.week-grid__day-name {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.week-grid__day-date {
+  color: var(--color-muted);
+  font-size: var(--text-2xs);
+}
+
+.week-grid__gutter {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  background: var(--color-bg);
+}
+
+.week-grid__hours {
+  position: relative;
+  height: var(--body-height);
+}
+
+.week-grid__hour {
+  position: absolute;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  color: var(--color-muted);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Filets horaires : trait net à l'heure, plus clair à la demie. */
+.week-grid__column {
+  position: relative;
+  height: var(--body-height);
+  border-left: 1px solid var(--color-line);
+  background-position-y: var(--body-pad);
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      var(--color-line) 0 1px,
+      transparent 1px var(--hour-height)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-line) 55%, transparent) 0 1px,
+      transparent 1px calc(var(--hour-height) / 2)
+    );
+}
+
+.week-grid__column--today {
+  background-color: color-mix(in oklab, var(--color-accent) 7%, transparent);
+}
+
+/* Repère de l'heure courante. */
+.week-grid__now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  z-index: 20;
+  background: var(--color-accent);
+  pointer-events: none;
+}
+
+.week-grid__now::before {
+  content: "";
+  position: absolute;
+  left: -0.25rem;
+  top: -0.1875rem;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+}
+
+/* --- Cours en grille ------------------------------------------------------ */
+
+.course-block {
+  position: absolute;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid color-mix(in oklab, var(--kind) 26%, transparent);
+  border-inline-start: 3px solid color-mix(in oklab, var(--kind) var(--kind-edge), transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in oklab, var(--kind) var(--kind-fill), var(--color-surface));
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  overflow: hidden;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.course-block:hover {
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
+}
+
+.course-block--live {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+}
+
+.course-block__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem;
+}
+
+.course-block__time {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.course-block__time span {
+  color: var(--color-muted);
+  font-weight: 400;
+}
+
+.course-block__kind {
+  flex-shrink: 0;
+  color: color-mix(in oklab, var(--kind) var(--kind-ink), var(--color-text));
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.course-block__code {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.course-block__subject {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--text-2xs);
+  line-height: 1.3;
+}
+
+.course-block__meta {
+  display: block;
+  color: var(--color-muted);
+  font-size: var(--text-2xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Couleurs par nature de cours ----------------------------------------- */
+
+.kind-amphi { --kind: var(--kind-cm); }
+.kind-td { --kind: var(--kind-td); }
+.kind-tp { --kind: var(--kind-tp); }
+.kind-sae { --kind: var(--kind-sae); }
+.kind-controle { --kind: var(--kind-other); }

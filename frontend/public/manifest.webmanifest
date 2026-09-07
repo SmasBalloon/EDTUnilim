@@ -1,0 +1,16 @@
+{
+  "name": "EDT · IUT info Limoges",
+  "short_name": "EDT",
+  "description": "Emplois du temps du département informatique de l'IUT du Limousin.",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#131313",
+  "theme_color": "#ff4b4b",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

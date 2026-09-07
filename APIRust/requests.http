@@ -1,0 +1,25 @@
+@host = http://localhost:3000
+
+### Présentation de l'API
+GET {{host}}/
+
+### État du service
+GET {{host}}/health
+
+### Années publiées et semaines disponibles
+GET {{host}}/api/v1/years
+
+### Semaines disponibles pour la première année
+GET {{host}}/api/v1/years/1/weeks
+
+### Emploi du temps complet
+GET {{host}}/api/v1/years/1/weeks/3
+
+### Emploi du temps d'un demi-groupe
+GET {{host}}/api/v1/years/1/weeks/3?group=G1a
+
+### Une seule journée
+GET {{host}}/api/v1/years/1/weeks/3?group=G1a&day=lundi
+
+### Référentiel des ressources
+GET {{host}}/api/v1/resources
