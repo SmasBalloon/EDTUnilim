@@ -1,11 +1,13 @@
-import { For, Show, createMemo, type Component } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, type Component } from 'solid-js';
 
 import type { Course, Week } from '../lib/api';
 import { gridBounds, packDay } from '../lib/layout';
+import { useCompact } from '../lib/media';
 import type { ViewMode } from '../lib/settings';
 import { clock, dayLabel, isRunning, nowMinutes, shortDate, toMinutes, todayIso } from '../lib/time';
 import { CourseBlock } from './CourseBlock';
 import { DayCard } from './DayCard';
+import { DayTabs } from './DayTabs';
 
 interface Props {
   week: Week;
@@ -17,7 +19,7 @@ interface Props {
 }
 
 /** Hauteur d'une heure de grille, en pixels. */
-const HOUR_HEIGHT = 50;
+const HOUR_HEIGHT = 57;
 /** Marge haute et basse, pour que les étiquettes extrêmes tiennent. */
 const EDGE_PAD = 5;
 
@@ -29,13 +31,75 @@ function coursesByDay(week: Week): Map<string, Course[]> {
   return byDay;
 }
 
+/** Distance minimale d'un balayage pour changer de jour, en pixels. */
+const SWIPE = 48;
+
 export const WeekView: Component<Props> = (props) => {
   const byDay = createMemo(() => coursesByDay(props.week));
+  const compact = useCompact();
+
+  // Sur écran étroit, un seul jour est affiché à la fois.
+  const [selected, setSelected] = createSignal<string | null>(null);
+
+  const days = createMemo(() => {
+    if (!compact()) return props.days;
+    const day = props.days.find((item) => item.date === selected());
+    return day ? [day] : props.days.slice(0, 1);
+  });
+
+  // À chaque semaine, on ouvre sur aujourd'hui s'il en fait partie.
+  createEffect(
+    on(
+      () => props.days,
+      (list) => {
+        const today = todayIso(clock());
+        setSelected(list.find((day) => day.date === today)?.date ?? list[0]?.date ?? null);
+      },
+    ),
+  );
+
+  /** Passe au jour voisin ; `1` vers la fin de la semaine. */
+  const step = (delta: number) => {
+    const index = props.days.findIndex((day) => day.date === selected());
+    const next = props.days[index + delta];
+    if (next) setSelected(next.date);
+  };
+
+  // Balayage horizontal : le geste attendu quand on ne voit qu'un jour.
+  let origin: { x: number; y: number } | null = null;
+  const onTouchStart = (event: TouchEvent) => {
+    const touch = event.touches[0];
+    origin = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  };
+  const onTouchEnd = (event: TouchEvent) => {
+    const touch = event.changedTouches[0];
+    if (!origin || !touch) return;
+    const dx = touch.clientX - origin.x;
+    const dy = touch.clientY - origin.y;
+    origin = null;
+    if (Math.abs(dx) > SWIPE && Math.abs(dx) > Math.abs(dy)) step(dx < 0 ? 1 : -1);
+  };
 
   return (
-    <Show when={props.view === 'grid'} fallback={<DayStrip {...props} byDay={byDay()} />}>
-      <TimeGrid {...props} byDay={byDay()} />
-    </Show>
+    <div
+      class="week-view"
+      classList={{ 'week-view--single': compact() }}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
+      <Show when={compact() && selected()}>
+        {(current) => (
+          <DayTabs days={props.days} selected={current()} onSelect={setSelected} />
+        )}
+      </Show>
+
+      <Show
+        when={props.view === 'grid'}
+        fallback={<DayStrip {...props} days={days()} byDay={byDay()} />}
+      >
+        <TimeGrid {...props} days={days()} byDay={byDay()} />
+      </Show>
+    </div>
   );
 };
 
