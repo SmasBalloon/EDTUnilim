@@ -16,7 +16,7 @@ const A1_S3: &[u8] = include_bytes!("fixtures/A1_S3.pdf");
 fn server() -> TestServer {
     let config = Config::from_env().expect("configuration par défaut valide");
     let store = Arc::new(Store::new(&config).expect("client HTTP construit"));
-    TestServer::new(http::router(&config, store)).expect("serveur de test")
+    TestServer::new(http::router(&config, store))
 }
 
 fn server_with(upstream: &MockServer) -> TestServer {
@@ -28,7 +28,7 @@ fn server_with(upstream: &MockServer) -> TestServer {
         upstream_timeout: Duration::from_secs(5),
     };
     let store = Arc::new(Store::new(&config).expect("client HTTP construit"));
-    TestServer::new(http::router(&config, store)).expect("serveur de test")
+    TestServer::new(http::router(&config, store))
 }
 
 fn uuid() -> u64 {
