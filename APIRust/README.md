@@ -89,6 +89,7 @@ Tout est optionnel ; les valeurs par défaut suffisent en développement.
 | `EDT_DISCORD_CLIENT_ID`, `EDT_DISCORD_CLIENT_SECRET` | — | application Discord (OAuth2) |
 | `EDT_DISCORD_BOT_TOKEN` | — | bot qui envoie les messages privés |
 | `EDT_DISCORD_GUILD_ID` | — | serveur où les personnes connectées sont ajoutées |
+| `EDT_DISCORD_KNOWN_GUILD_IDS` | — | serveurs où se trouve déjà le bot, séparés par des virgules : leurs membres ne sont pas ajoutés |
 | `EDT_SESSION_SECRET` | — | clé de signature des sessions (32 caractères au moins) |
 | `EDT_STATE_DIR` | `state` | comptes et classes suivies (`users.json`) |
 | `EDT_LOG` | `info` | filtre de journalisation (`tracing`) |

@@ -110,9 +110,12 @@ pub async fn callback(
     let signed_in = async {
         let token = account.discord.exchange_code(&code, &redirect_uri).await?;
         let profile = account.discord.current_user(&token).await?;
-        // Sans serveur commun, le bot ne pourra pas écrire : l'échec est
-        // signalé mais n'empêche pas la connexion.
-        if let Err(error) = account.discord.join_guild(&profile.id, &token).await {
+        // Sans serveur commun, le bot ne pourra pas écrire. Une personne déjà
+        // membre d'un serveur connu du bot n'est pas ajoutée à un autre ; pour
+        // les autres, l'échec de l'ajout est signalé sans bloquer la connexion.
+        if let Some(guild_id) = account.discord.known_guild_of(&profile.id).await {
+            info!(user = profile.id, guild_id, "déjà membre d'un serveur du bot, pas d'ajout");
+        } else if let Err(error) = account.discord.join_guild(&profile.id, &token).await {
             warn!(%error, user = profile.id, "ajout au serveur Discord impossible");
         }
         Ok::<_, crate::discord::DiscordError>(profile)

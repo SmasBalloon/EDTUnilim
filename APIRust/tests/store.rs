@@ -200,6 +200,7 @@ async fn watching(server: &MockServer, cache_dir: &std::path::Path, state_dir: &
         client_secret: "secret".into(),
         bot_token: "bot".into(),
         guild_id: "7".into(),
+        known_guild_ids: vec!["5".into()],
         session_secret: "s".repeat(32),
         api_base: format!("{}/discord", server.uri()),
     })

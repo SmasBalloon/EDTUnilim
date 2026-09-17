@@ -31,6 +31,7 @@ async fn setup(upstream: &MockServer) -> Setup {
         client_secret: "secret".into(),
         bot_token: "bot".into(),
         guild_id: "7".into(),
+        known_guild_ids: vec!["5".into()],
         session_secret: "s".repeat(32),
         api_base: format!("{}/discord", upstream.uri()),
     };
@@ -63,8 +64,9 @@ async fn setup(upstream: &MockServer) -> Setup {
     Setup { server, _dirs: (cache_dir, state_dir) }
 }
 
-/// Discord accepte le code, présente Ada et l'ajoute au serveur.
-async fn discord_accepts_login(upstream: &MockServer) {
+/// Discord accepte le code et présente Ada. Si elle est déjà membre du serveur
+/// connu (`5`), elle n'est pas ajoutée au serveur d'accueil (`7`).
+async fn discord_accepts_login(upstream: &MockServer, in_known_guild: bool) {
     Mock::given(method("POST"))
         .and(path("/discord/oauth2/token"))
         .and(body_string_contains("code=abc"))
@@ -80,12 +82,24 @@ async fn discord_accepts_login(upstream: &MockServer) {
         )
         .mount(upstream)
         .await;
+    let membership = if in_known_guild {
+        ResponseTemplate::new(200).set_body_string(r#"{"user":{"id":"42"}}"#)
+    } else {
+        ResponseTemplate::new(404).set_body_string(r#"{"message":"Unknown Member","code":10007}"#)
+    };
+    Mock::given(method("GET"))
+        .and(path("/discord/guilds/5/members/42"))
+        .and(header("authorization", "Bot bot"))
+        .respond_with(membership)
+        .expect(1)
+        .mount(upstream)
+        .await;
     Mock::given(method("PUT"))
         .and(path("/discord/guilds/7/members/42"))
         .and(header("authorization", "Bot bot"))
         .and(body_string_contains("tok"))
         .respond_with(ResponseTemplate::new(201).set_body_string("{}"))
-        .expect(1)
+        .expect(if in_known_guild { 0 } else { 1 })
         .mount(upstream)
         .await;
 }
@@ -104,7 +118,7 @@ async fn start_login(server: &TestServer) -> String {
 #[tokio::test]
 async fn signs_in_with_discord_and_subscribes_to_a_class() {
     let upstream = MockServer::start().await;
-    discord_accepts_login(&upstream).await;
+    discord_accepts_login(&upstream, false).await;
     // La semaine en cours accompagne le message de bienvenue.
     Mock::given(method("GET"))
         .and(path("/A1/"))
@@ -163,6 +177,18 @@ async fn signs_in_with_discord_and_subscribes_to_a_class() {
 }
 
 #[tokio::test]
+async fn does_not_add_a_member_of_a_known_server_to_the_home_server() {
+    let upstream = MockServer::start().await;
+    discord_accepts_login(&upstream, true).await;
+
+    let Setup { server, _dirs } = setup(&upstream).await;
+    let state = start_login(&server).await;
+    let back = server.get(&format!("/api/v1/auth/callback?code=abc&state={state}")).await;
+    assert_eq!(back.header("location"), "/#compte");
+    server.get("/api/v1/me").await.assert_status_ok();
+}
+
+#[tokio::test]
 async fn refuses_a_callback_whose_state_does_not_match() {
     let upstream = MockServer::start().await;
     // Aucun appel à Discord ne doit partir.
@@ -179,7 +205,7 @@ async fn refuses_a_callback_whose_state_does_not_match() {
 #[tokio::test]
 async fn deletes_the_account() {
     let upstream = MockServer::start().await;
-    discord_accepts_login(&upstream).await;
+    discord_accepts_login(&upstream, false).await;
 
     let Setup { server, _dirs } = setup(&upstream).await;
     let state = start_login(&server).await;

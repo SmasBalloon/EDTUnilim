@@ -106,6 +106,23 @@ impl Discord {
         parse(self.send(request).await?).await
     }
 
+    /// Serveurs connus dont la personne est membre, dans l'ordre de la configuration.
+    pub async fn known_guild_of(&self, user_id: &str) -> Option<&str> {
+        for guild_id in &self.config.known_guild_ids {
+            let request = self.bot(
+                self.client.get(format!("{}/guilds/{guild_id}/members/{user_id}", self.config.api_base)),
+            );
+            match self.send(request).await {
+                Ok(_) => return Some(guild_id),
+                // Membre inconnu : elle n'est simplement pas sur ce serveur.
+                Err(DiscordError::Refused { status: StatusCode::NOT_FOUND, code: Some(10007), .. }) => {}
+                // Bot absent du serveur, Discord indisponible… : on passe au suivant.
+                Err(error) => warn!(%error, guild_id, "vérification d'appartenance impossible"),
+            }
+        }
+        None
+    }
+
     /// Ajoute la personne au serveur du bot ; sans effet si elle y est déjà.
     pub async fn join_guild(&self, user_id: &str, access_token: &str) -> Result<(), DiscordError> {
         let request = self

@@ -46,6 +46,9 @@ pub struct DiscordConfig {
     pub bot_token: String,
     /// Serveur où les personnes connectées sont ajoutées, et où se trouve le bot.
     pub guild_id: String,
+    /// Serveurs où le bot se trouve déjà : leurs membres peuvent recevoir des
+    /// messages privés sans être ajoutés à `guild_id`.
+    pub known_guild_ids: Vec<String>,
     /// Clé de signature des cookies de session.
     pub session_secret: String,
     pub api_base: String,
@@ -57,6 +60,7 @@ impl std::fmt::Debug for DiscordConfig {
         f.debug_struct("DiscordConfig")
             .field("client_id", &self.client_id)
             .field("guild_id", &self.guild_id)
+            .field("known_guild_ids", &self.known_guild_ids)
             .field("api_base", &self.api_base)
             .finish_non_exhaustive()
     }
@@ -134,6 +138,9 @@ fn discord() -> Result<Option<DiscordConfig>, ConfigError> {
         client_secret,
         bot_token,
         guild_id,
+        known_guild_ids: var("EDT_DISCORD_KNOWN_GUILD_IDS")
+            .map(|ids| ids.split(',').map(str::trim).filter(|id| !id.is_empty()).map(str::to_owned).collect())
+            .unwrap_or_default(),
         session_secret,
         api_base: var("EDT_DISCORD_API")
             .unwrap_or_else(|| DEFAULT_DISCORD_API.to_owned())
@@ -178,6 +185,7 @@ mod tests {
             "EDT_STATE_DIR",
             "EDT_PUBLIC_URL",
             "EDT_DISCORD_API",
+            "EDT_DISCORD_KNOWN_GUILD_IDS",
         ]
         .into_iter()
         .chain(DISCORD_VARS)
@@ -263,10 +271,12 @@ mod tests {
             std::env::set_var(name, "x".repeat(MIN_SECRET_LEN));
         }
         std::env::set_var("EDT_PUBLIC_URL", "https://edt.example/");
+        std::env::set_var("EDT_DISCORD_KNOWN_GUILD_IDS", " 111, 222 ,");
 
         let config = Config::from_env().expect("configuration valide");
         let discord = config.discord.as_ref().expect("Discord configuré");
         assert_eq!(discord.api_base, DEFAULT_DISCORD_API);
+        assert_eq!(discord.known_guild_ids, ["111", "222"]);
         assert_eq!(config.public_url, "https://edt.example");
         assert!(config.is_https());
         assert!(!format!("{discord:?}").contains("client_secret"), "les secrets restent hors des journaux");
