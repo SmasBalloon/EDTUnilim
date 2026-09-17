@@ -6,10 +6,11 @@ use std::time::Duration;
 use edt_unilim_api::config::Config;
 use edt_unilim_api::error::ApiError;
 use edt_unilim_api::store::Store;
-use wiremock::matchers::{header, method, path};
+use wiremock::matchers::{body_string_contains, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const A1_S3: &[u8] = include_bytes!("fixtures/A1_S3.pdf");
+const A3_S2: &[u8] = include_bytes!("fixtures/A3_S2.pdf");
 
 fn config(upstream: &MockServer, cache_dir: &std::path::Path) -> Config {
     Config {
@@ -18,6 +19,7 @@ fn config(upstream: &MockServer, cache_dir: &std::path::Path) -> Config {
         cache_dir: cache_dir.to_path_buf(),
         refresh_interval: Duration::from_secs(3600),
         upstream_timeout: Duration::from_secs(5),
+        discord_webhook: None,
     }
 }
 
@@ -182,4 +184,142 @@ async fn revalidates_a_week_on_demand_but_not_twice_in_a_row() {
 
     // Revalidation immédiate : ignorée, le mock refuserait un troisième appel.
     store.revalidate_timetable(1, 3).await;
+}
+
+/// Store relié à un webhook simulé, servi par le même serveur que l'amont.
+fn watching(server: &MockServer, cache_dir: &std::path::Path) -> Store {
+    let config =
+        Config { discord_webhook: Some(format!("{}/webhook", server.uri())), ..config(server, cache_dir) };
+    Store::new(&config).expect("store construit")
+}
+
+async fn index(server: &MockServer, body: &'static str) {
+    Mock::given(method("GET"))
+        .and(path("/A1/"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(body))
+        .mount(server)
+        .await;
+    for year in ["/A2/", "/A3/"] {
+        Mock::given(method("GET"))
+            .and(path(year))
+            .respond_with(ResponseTemplate::new(200).set_body_string(""))
+            .mount(server)
+            .await;
+    }
+}
+
+const WITH_S3: &str = r#"<a href="A1_S3.pdf">A1_S3.pdf</a>"#;
+
+#[tokio::test]
+async fn notifies_discord_when_a_watched_week_changes() {
+    let server = MockServer::start().await;
+    index(&server, WITH_S3).await;
+    // Première version, puis une version aux créneaux différents.
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A1_S3).insert_header("etag", "\"v1\""))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A3_S2).insert_header("etag", "\"v2\""))
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/webhook"))
+        .and(body_string_contains("BUT 1 · semaine 3"))
+        .and(body_string_contains("modifiée"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1..)
+        .mount(&server)
+        .await;
+
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let store = watching(&server, cache_dir.path());
+
+    // Premier passage : la semaine est suivie sans avoir été consultée.
+    store.refresh().await;
+    // Second passage : le PDF a changé.
+    store.refresh().await;
+}
+
+#[tokio::test]
+async fn stays_silent_when_a_republished_pdf_has_the_same_courses() {
+    let server = MockServer::start().await;
+    index(&server, WITH_S3).await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A1_S3))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/webhook"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let store = watching(&server, cache_dir.path());
+    store.refresh().await;
+    store.refresh().await;
+}
+
+#[tokio::test]
+async fn announces_a_newly_published_week() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/A1/"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(""))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    index(&server, WITH_S3).await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A1_S3))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/webhook"))
+        .and(body_string_contains("publiée"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let store = watching(&server, cache_dir.path());
+    store.refresh().await; // index vide
+    store.refresh().await; // S3 apparaît
+}
+
+#[tokio::test]
+async fn detects_a_change_made_while_the_service_was_stopped() {
+    let server = MockServer::start().await;
+    index(&server, WITH_S3).await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A3_S2))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/webhook"))
+        .and(body_string_contains("modifiée"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1..)
+        .mount(&server)
+        .await;
+
+    // L'ancienne version est restée sur disque d'une exécution précédente.
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    std::fs::create_dir_all(cache_dir.path().join("A1")).unwrap();
+    std::fs::write(cache_dir.path().join("A1").join("A1_S3.pdf"), A1_S3).unwrap();
+
+    let store = watching(&server, cache_dir.path());
+    store.refresh().await;
 }

@@ -15,6 +15,7 @@ use tracing::{debug, info, warn};
 use crate::config::{Config, YEARS};
 use crate::error::ApiError;
 use crate::model::Timetable;
+use crate::notify::{self, Notifier};
 use crate::pdf;
 use crate::upstream::{self, Fetch, Upstream, Validators};
 
@@ -37,6 +38,8 @@ pub struct Store {
     timetables: RwLock<HashMap<(u8, u8), Arc<Entry>>>,
     /// Dernière revalidation forcée, par index d'année (`None`) ou semaine.
     revalidated: Mutex<HashMap<(u8, Option<u8>), Instant>>,
+    /// Sans webhook configuré, aucun changement n'est signalé.
+    notifier: Option<Notifier>,
 }
 
 impl Store {
@@ -47,6 +50,7 @@ impl Store {
             weeks: RwLock::default(),
             timetables: RwLock::default(),
             revalidated: Mutex::default(),
+            notifier: config.discord_webhook.clone().map(Notifier::new).transpose()?,
         })
     }
 
@@ -97,9 +101,16 @@ impl Store {
     }
 
     /// Revalide tout ce qui est en cache et réanalyse ce qui a changé.
+    ///
+    /// Quand les changements sont signalés, toutes les semaines publiées sont
+    /// suivies, et pas seulement celles qu'un client a déjà consultées.
     pub async fn refresh(&self) {
         for year in YEARS {
+            let known = self.weeks.read().expect("cache empoisonné").get(&year).cloned();
             self.refresh_weeks(year).await;
+            if self.notifier.is_some() {
+                self.watch_year(year, known.as_deref()).await;
+            }
         }
 
         let cached: Vec<(u8, u8)> =
@@ -146,19 +157,66 @@ impl Store {
         }
     }
 
+    /// Met en cache les semaines publiées qui n'y sont pas encore, pour que
+    /// leurs prochaines versions puissent leur être comparées.
+    async fn watch_year(&self, year: u8, known: Option<&Vec<u8>>) {
+        let Some(weeks) = self.weeks.read().expect("cache empoisonné").get(&year).cloned() else { return };
+        for &week in weeks.iter() {
+            if self.timetables.read().expect("cache empoisonné").contains_key(&(year, week)) {
+                continue;
+            }
+            // Une semaine absente de l'index précédent vient d'être publiée.
+            // Au premier passage, rien n'est « nouveau » : l'index était inconnu.
+            let published = known.is_some_and(|known| !known.contains(&week));
+
+            // Après un redémarrage, la version sur disque sert de point de
+            // comparaison : un changement survenu pendant l'arrêt est signalé
+            // au passage suivant.
+            if !published && self.load_from_disk(year, week).await {
+                continue;
+            }
+            match self.timetable(year, week).await {
+                Ok(entry) if published => self.notify(&[notify::new_week_message(&entry.timetable)]).await,
+                Ok(_) => {}
+                Err(error) => warn!(%error, year, week, "semaine publiée illisible"),
+            }
+        }
+    }
+
+    /// Reprend en mémoire un PDF déjà sur disque, sans validateurs : la
+    /// prochaine revalidation le retéléchargera et le comparera.
+    async fn load_from_disk(&self, year: u8, week: u8) -> bool {
+        let Ok(bytes) = tokio::fs::read(self.disk_path(year, week)).await else { return false };
+        self.store(year, week, upstream::Document { bytes, validators: Validators::default() }).is_ok()
+    }
+
+    async fn notify(&self, messages: &[String]) {
+        if let Some(notifier) = &self.notifier {
+            notifier.send(messages).await;
+        }
+    }
+
     /// Relit une semaine déjà en cache ; sans effet si elle n'y est pas.
     async fn refresh_timetable(&self, year: u8, week: u8) {
-        let validators = match self.timetables.read().expect("cache empoisonné").get(&(year, week)) {
-            Some(entry) => entry.validators.clone(),
-            None => return,
+        let Some(previous) = self.timetables.read().expect("cache empoisonné").get(&(year, week)).cloned()
+        else {
+            return;
         };
 
-        match self.upstream.fetch_week(year, week, &validators).await {
+        match self.upstream.fetch_week(year, week, &previous.validators).await {
             Ok(Fetch::Unchanged) => debug!(year, week, "emploi du temps inchangé"),
             Ok(Fetch::Fresh(document)) => {
                 self.write_to_disk(year, week, &document.bytes).await;
                 match self.store(year, week, document) {
-                    Ok(_) => info!(year, week, "emploi du temps mis à jour"),
+                    Ok(entry) => {
+                        let changes = notify::diff(&previous.timetable, &entry.timetable);
+                        if changes.is_empty() {
+                            debug!(year, week, "nouveau PDF, créneaux identiques");
+                        } else {
+                            info!(year, week, "emploi du temps mis à jour");
+                            self.notify(&notify::change_messages(&entry.timetable, &changes)).await;
+                        }
+                    }
                     Err(error) => warn!(%error, year, week, "nouvelle version illisible"),
                 }
             }

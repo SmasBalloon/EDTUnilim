@@ -85,6 +85,7 @@ Tout est optionnel ; les valeurs par défaut suffisent en développement.
 | `EDT_CACHE_DIR` | `cache` | cache disque des PDF |
 | `EDT_REFRESH_SECONDS` | `900` | périodicité de la revalidation |
 | `EDT_UPSTREAM_TIMEOUT_SECONDS` | `15` | délai accordé au serveur amont |
+| `EDT_DISCORD_WEBHOOK` | — | webhook Discord : signale les créneaux modifiés, ajoutés ou retirés, et les semaines publiées |
 | `EDT_LOG` | `info` | filtre de journalisation (`tracing`) |
 
 ## Fonctionnement

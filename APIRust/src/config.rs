@@ -24,6 +24,8 @@ pub struct Config {
     pub cache_dir: PathBuf,
     pub refresh_interval: Duration,
     pub upstream_timeout: Duration,
+    /// Webhook Discord où signaler les changements d'emploi du temps.
+    pub discord_webhook: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -47,6 +49,7 @@ impl Config {
             cache_dir: var("EDT_CACHE_DIR").map_or_else(|| PathBuf::from(DEFAULT_CACHE_DIR), PathBuf::from),
             refresh_interval: duration("EDT_REFRESH_SECONDS", DEFAULT_REFRESH)?,
             upstream_timeout: duration("EDT_UPSTREAM_TIMEOUT_SECONDS", DEFAULT_TIMEOUT)?,
+            discord_webhook: var("EDT_DISCORD_WEBHOOK"),
         })
     }
 }
@@ -77,6 +80,7 @@ mod tests {
             "EDT_CACHE_DIR",
             "EDT_REFRESH_SECONDS",
             "EDT_UPSTREAM_TIMEOUT_SECONDS",
+            "EDT_DISCORD_WEBHOOK",
         ] {
             std::env::remove_var(name);
         }

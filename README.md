@@ -28,6 +28,7 @@ variables d'environnement — copier `.env.example` en `.env` pour les changer :
 | `EDT_UPSTREAM` | `https://edt-iut-info.unilim.fr/edt` | racine des PDF publiés |
 | `EDT_REFRESH_SECONDS` | `900` | périodicité de la revalidation |
 | `EDT_UPSTREAM_TIMEOUT_SECONDS` | `15` | délai accordé au serveur amont |
+| `EDT_DISCORD_WEBHOOK` | — | webhook Discord : signale les créneaux modifiés, ajoutés ou retirés, et les semaines publiées |
 | `EDT_LOG` | `info` | filtre de journalisation de l'API |
 
 Les PDF téléchargés vivent dans le volume `edt-cache` : après un redémarrage,

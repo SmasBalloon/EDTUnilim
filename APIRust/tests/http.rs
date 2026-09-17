@@ -26,6 +26,7 @@ fn server_with(upstream: &MockServer) -> TestServer {
         cache_dir: std::env::temp_dir().join(format!("edt-http-test-{}", uuid())),
         refresh_interval: Duration::from_secs(3600),
         upstream_timeout: Duration::from_secs(5),
+        discord_webhook: None,
     };
     let store = Arc::new(Store::new(&config).expect("client HTTP construit"));
     TestServer::new(http::router(&config, store))

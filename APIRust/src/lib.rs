@@ -9,6 +9,7 @@ pub mod config;
 pub mod error;
 pub mod http;
 pub mod model;
+pub mod notify;
 pub mod pdf;
 pub mod store;
 pub mod upstream;
