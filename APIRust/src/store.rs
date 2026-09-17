@@ -6,7 +6,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 use time::OffsetDateTime;
 use tracing::{debug, info, warn};
@@ -25,11 +26,17 @@ pub struct Entry {
     validators: Validators,
 }
 
+/// Délai minimal entre deux revalidations demandées par un client : un bouton
+/// martelé ne doit pas se traduire en rafale de requêtes vers le département.
+const MIN_REVALIDATION: Duration = Duration::from_secs(30);
+
 pub struct Store {
     upstream: Upstream,
     cache_dir: PathBuf,
     weeks: RwLock<HashMap<u8, Arc<Vec<u8>>>>,
     timetables: RwLock<HashMap<(u8, u8), Arc<Entry>>>,
+    /// Dernière revalidation forcée, par index d'année (`None`) ou semaine.
+    revalidated: Mutex<HashMap<(u8, Option<u8>), Instant>>,
 }
 
 impl Store {
@@ -39,6 +46,7 @@ impl Store {
             cache_dir: config.cache_dir.clone(),
             weeks: RwLock::default(),
             timetables: RwLock::default(),
+            revalidated: Mutex::default(),
         })
     }
 
@@ -91,31 +99,70 @@ impl Store {
     /// Revalide tout ce qui est en cache et réanalyse ce qui a changé.
     pub async fn refresh(&self) {
         for year in YEARS {
-            match self.upstream.list_weeks(year).await {
-                Ok(weeks) => {
-                    self.weeks.write().expect("cache empoisonné").insert(year, Arc::new(weeks));
-                }
-                Err(error) => warn!(%error, year, "index des semaines indisponible"),
-            }
+            self.refresh_weeks(year).await;
         }
 
-        let cached: Vec<((u8, u8), Validators)> = {
-            let timetables = self.timetables.read().expect("cache empoisonné");
-            timetables.iter().map(|(key, entry)| (*key, entry.validators.clone())).collect()
+        let cached: Vec<(u8, u8)> =
+            self.timetables.read().expect("cache empoisonné").keys().copied().collect();
+        for (year, week) in cached {
+            self.refresh_timetable(year, week).await;
+        }
+    }
+
+    /// Revalide à la demande d'un client l'index d'une année, sans attendre
+    /// le prochain passage périodique.
+    pub async fn revalidate_weeks(&self, year: u8) {
+        if YEARS.contains(&year) && self.claim_revalidation(year, None) {
+            self.refresh_weeks(year).await;
+        }
+    }
+
+    /// Revalide à la demande d'un client une semaine déjà en cache.
+    pub async fn revalidate_timetable(&self, year: u8, week: u8) {
+        if self.claim_revalidation(year, Some(week)) {
+            self.refresh_timetable(year, week).await;
+        }
+    }
+
+    /// Vrai si la revalidation peut partir, faux si une autre vient d'avoir lieu.
+    fn claim_revalidation(&self, year: u8, week: Option<u8>) -> bool {
+        let now = Instant::now();
+        let mut revalidated = self.revalidated.lock().expect("cache empoisonné");
+        match revalidated.get(&(year, week)) {
+            Some(last) if now.duration_since(*last) < MIN_REVALIDATION => false,
+            _ => {
+                revalidated.insert((year, week), now);
+                true
+            }
+        }
+    }
+
+    async fn refresh_weeks(&self, year: u8) {
+        match self.upstream.list_weeks(year).await {
+            Ok(weeks) => {
+                self.weeks.write().expect("cache empoisonné").insert(year, Arc::new(weeks));
+            }
+            Err(error) => warn!(%error, year, "index des semaines indisponible"),
+        }
+    }
+
+    /// Relit une semaine déjà en cache ; sans effet si elle n'y est pas.
+    async fn refresh_timetable(&self, year: u8, week: u8) {
+        let validators = match self.timetables.read().expect("cache empoisonné").get(&(year, week)) {
+            Some(entry) => entry.validators.clone(),
+            None => return,
         };
 
-        for ((year, week), validators) in cached {
-            match self.upstream.fetch_week(year, week, &validators).await {
-                Ok(Fetch::Unchanged) => debug!(year, week, "emploi du temps inchangé"),
-                Ok(Fetch::Fresh(document)) => {
-                    self.write_to_disk(year, week, &document.bytes).await;
-                    match self.store(year, week, document) {
-                        Ok(_) => info!(year, week, "emploi du temps mis à jour"),
-                        Err(error) => warn!(%error, year, week, "nouvelle version illisible"),
-                    }
+        match self.upstream.fetch_week(year, week, &validators).await {
+            Ok(Fetch::Unchanged) => debug!(year, week, "emploi du temps inchangé"),
+            Ok(Fetch::Fresh(document)) => {
+                self.write_to_disk(year, week, &document.bytes).await;
+                match self.store(year, week, document) {
+                    Ok(_) => info!(year, week, "emploi du temps mis à jour"),
+                    Err(error) => warn!(%error, year, week, "nouvelle version illisible"),
                 }
-                Err(error) => warn!(%error, year, week, "revalidation impossible"),
             }
+            Err(error) => warn!(%error, year, week, "revalidation impossible"),
         }
     }
 

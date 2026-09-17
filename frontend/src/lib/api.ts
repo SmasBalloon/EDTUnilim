@@ -63,10 +63,18 @@ export class ApiError extends Error {
 
 const BASE = import.meta.env.VITE_API_URL ?? '';
 
-async function get<T>(path: string): Promise<T> {
+/**
+ * Avec `fresh`, le cache HTTP du navigateur est contourné et la requête porte
+ * `Cache-Control: no-cache`, ce qui demande à l'API de revalider auprès du
+ * département au lieu de rendre sa copie en mémoire.
+ */
+async function get<T>(path: string, fresh = false): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${BASE}${path}`, { headers: { accept: 'application/json' } });
+    response = await fetch(`${BASE}${path}`, {
+      headers: { accept: 'application/json' },
+      cache: fresh ? 'reload' : 'default',
+    });
   } catch {
     throw new ApiError('offline', 'service injoignable — vérifie ta connexion', 0);
   }
@@ -85,10 +93,13 @@ async function get<T>(path: string): Promise<T> {
 /** Les requêtes identiques ne partent qu'une fois par session. */
 const cache = new Map<string, Promise<unknown>>();
 
-function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
+/** Requêtes oubliées par `clearCache`, à relire en contournant tous les caches. */
+const stale = new Set<string>();
+
+function cached<T>(key: string, load: (fresh: boolean) => Promise<T>): Promise<T> {
   const hit = cache.get(key) as Promise<T> | undefined;
   if (hit) return hit;
-  const pending = load().catch((error: unknown) => {
+  const pending = load(stale.delete(key)).catch((error: unknown) => {
     cache.delete(key);
     throw error;
   });
@@ -97,7 +108,7 @@ function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
 }
 
 export function fetchYears(): Promise<YearSummary[]> {
-  return cached('years', () => get<YearSummary[]>('/api/v1/years'));
+  return cached('years', (fresh) => get<YearSummary[]>('/api/v1/years', fresh));
 }
 
 /**
@@ -106,12 +117,13 @@ export function fetchYears(): Promise<YearSummary[]> {
  */
 export function fetchWeek(year: number, week: number, group?: string): Promise<Week> {
   const query = group ? `?group=${encodeURIComponent(group)}` : '';
-  return cached(`w:${year}:${week}:${group ?? ''}`, () =>
-    get<Week>(`/api/v1/years/${year}/weeks/${week}${query}`),
+  return cached(`w:${year}:${week}:${group ?? ''}`, (fresh) =>
+    get<Week>(`/api/v1/years/${year}/weeks/${week}${query}`, fresh),
   );
 }
 
-/** Oublie les réponses mémorisées, pour forcer une relecture. */
+/** Oublie les réponses mémorisées : leur prochaine lecture repart de la source. */
 export function clearCache(): void {
+  for (const key of cache.keys()) stale.add(key);
   cache.clear();
 }

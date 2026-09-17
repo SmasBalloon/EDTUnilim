@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use axum::extract::{Query, State};
 use axum::http::header::CACHE_CONTROL;
+use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
@@ -25,10 +26,28 @@ pub struct YearSummary {
     weeks: Vec<u8>,
 }
 
+/// Un client qui recharge explicitement (`fetch(…, { cache: 'reload' })`,
+/// Ctrl+Maj+R) envoie `Cache-Control: no-cache` : il veut la version du
+/// département, pas celle gardée en mémoire.
+fn wants_fresh(headers: &HeaderMap) -> bool {
+    headers
+        .get_all(CACHE_CONTROL)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .any(|directive| matches!(directive.trim().to_ascii_lowercase().as_str(), "no-cache" | "max-age=0"))
+}
+
 /// Années publiées, avec les semaines disponibles pour chacune.
-pub async fn years(State(state): State<Arc<AppState>>) -> Result<Json<Vec<YearSummary>>, ApiError> {
+pub async fn years(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<YearSummary>>, ApiError> {
     let mut summaries = Vec::with_capacity(YEARS.len());
     for year in YEARS {
+        if wants_fresh(&headers) {
+            state.store.revalidate_weeks(year).await;
+        }
         summaries.push(YearSummary { year, weeks: state.store.weeks(year).await?.to_vec() });
     }
     Ok(Json(summaries))
@@ -38,7 +57,11 @@ pub async fn years(State(state): State<Arc<AppState>>) -> Result<Json<Vec<YearSu
 pub async fn weeks(
     State(state): State<Arc<AppState>>,
     PathParams(year): PathParams<u8>,
+    headers: HeaderMap,
 ) -> Result<Json<YearSummary>, ApiError> {
+    if wants_fresh(&headers) {
+        state.store.revalidate_weeks(year).await;
+    }
     let weeks = state.store.weeks(year).await?.to_vec();
     Ok(Json(YearSummary { year, weeks }))
 }
@@ -73,7 +96,11 @@ pub async fn week(
     State(state): State<Arc<AppState>>,
     PathParams((year, week)): PathParams<(u8, u8)>,
     Query(filters): Query<Filters>,
+    headers: HeaderMap,
 ) -> Result<Response, ApiError> {
+    if wants_fresh(&headers) {
+        state.store.revalidate_timetable(year, week).await;
+    }
     let entry = state.store.timetable(year, week).await?;
     let timetable = &entry.timetable;
 
@@ -127,6 +154,18 @@ mod tests {
         assert!(matches_group("G1a", "g1a"));
         assert!(!matches_group("G1a", "G1b"));
         assert!(!matches_group("G2", "G1"));
+    }
+
+    #[test]
+    fn detects_an_explicit_reload() {
+        let mut headers = HeaderMap::new();
+        assert!(!wants_fresh(&headers));
+        headers.insert(CACHE_CONTROL, "max-age=0".parse().unwrap());
+        assert!(wants_fresh(&headers));
+        headers.insert(CACHE_CONTROL, "public, No-Cache".parse().unwrap());
+        assert!(wants_fresh(&headers));
+        headers.insert(CACHE_CONTROL, "max-age=300".parse().unwrap());
+        assert!(!wants_fresh(&headers));
     }
 
     #[test]

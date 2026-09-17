@@ -1,19 +1,31 @@
 import { Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount } from 'solid-js';
-import { ChevronLeft, ChevronRight, Download, Settings } from 'lucide-solid';
+import { CalendarDays, ChevronLeft, ChevronRight, DoorOpen, Download, Settings } from 'lucide-solid';
 
-import { ApiError, fetchWeek, fetchYears, type Course } from './lib/api';
+import { ApiError, clearCache, fetchWeek, fetchYears, type Course } from './lib/api';
 import { groupBases, groupLabel, weekDays } from './lib/groups';
 import { downloadIcs } from './lib/ics';
 import { clock, greeting, humanDuration, periodLabel, resolveCurrentWeek } from './lib/time';
 import { settings, update } from './lib/settings';
 import { CourseModal } from './components/CourseModal';
+import { RoomsPage } from './components/RoomsPage';
 import { SettingsSheet } from './components/SettingsSheet';
 import { Setup } from './components/Setup';
 import { StatusCard } from './components/StatusCard';
 import { WeekView } from './components/WeekView';
 
+type Page = 'timetable' | 'rooms';
+
+/** La page suit l'ancre de l'URL : `#salles` se partage et revient avec « Précédent ». */
+function pageFromHash(): Page {
+  return location.hash === '#salles' ? 'rooms' : 'timetable';
+}
+
 export function App() {
-  const [years] = createResource(fetchYears);
+  const [page, setPage] = createSignal<Page>(pageFromHash());
+  const goTo = (next: Page) => {
+    location.hash = next === 'rooms' ? 'salles' : '';
+  };
+  const [years, { refetch: refetchYears }] = createResource(fetchYears);
   const [week, setWeek] = createSignal<number | null>(null);
   const [selected, setSelected] = createSignal<Course | null>(null);
   const [showSettings, setShowSettings] = createSignal(false);
@@ -43,7 +55,7 @@ export function App() {
    * Deux lectures : la semaine filtrée sur le groupe (ce qu'on affiche) et la
    * semaine complète (qui donne les jours occupés et la liste des groupes).
    */
-  const [data] = createResource(
+  const [data, { refetch: refetchData }] = createResource(
     () => {
       const { year, group } = settings();
       const target = week();
@@ -61,7 +73,7 @@ export function App() {
   );
 
   /** Semaine courante filtrée : elle alimente la carte d'état. */
-  const [todayWeek] = createResource(
+  const [todayWeek, { refetch: refetchTodayWeek }] = createResource(
     () => {
       const { year, group } = settings();
       const current = currentWeek();
@@ -71,6 +83,14 @@ export function App() {
     },
     ({ year, group, week: target }) => fetchWeek(year, target, group),
   );
+
+  /** Relit tout ce qui est affiché, sans passer par les caches. */
+  const reload = () => {
+    clearCache();
+    void refetchYears();
+    void refetchData();
+    void refetchTodayWeek();
+  };
 
   const bases = createMemo(() => {
     const loaded = data();
@@ -95,11 +115,21 @@ export function App() {
   };
 
   onMount(() => {
+    const onHash = () => {
+      setPage(pageFromHash());
+      setSelected(null);
+    };
+    window.addEventListener('hashchange', onHash);
+    onCleanup(() => window.removeEventListener('hashchange', onHash));
+  });
+
+  onMount(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setSelected(null);
         setShowSettings(false);
       }
+      if (page() !== 'timetable') return;
       if (event.key === 'ArrowLeft') step(-1);
       if (event.key === 'ArrowRight') step(1);
     };
@@ -125,51 +155,81 @@ export function App() {
     >
       {(loaded) => (
         <Show
-          when={settings().year !== null && settings().group !== null}
+          when={page() === 'rooms' || (settings().year !== null && settings().group !== null)}
           fallback={<Setup years={loaded()} />}
         >
           <div class="app">
             {/* Bandeau : qui on est, et les actions de l'application. */}
             <header class="banner">
               <div>
-                <h1 class="banner__greeting">{greeting(clock())}</h1>
+                <h1 class="banner__greeting">
+                  {page() === 'rooms' ? 'Salles' : greeting(clock())}
+                </h1>
                 <p class="banner__identity">
-                  {`Vous êtes en ${groupLabel(settings().group ?? '')}.`}
+                  {page() === 'rooms'
+                    ? 'Libres ou occupées, maintenant ou à l’heure choisie.'
+                    : `Vous êtes en ${groupLabel(settings().group ?? '')}.`}
                 </p>
               </div>
 
               <div class="banner__actions">
-                <button
-                  type="button"
-                  class="button button--on-accent"
-                  aria-pressed={settings().view === 'grid'}
-                  onClick={() => update({ view: 'grid' })}
+                <Show
+                  when={page() === 'timetable'}
+                  fallback={
+                    <button
+                      type="button"
+                      class="button button--on-accent"
+                      title="Emploi du temps"
+                      aria-label="Emploi du temps"
+                      onClick={() => goTo('timetable')}
+                    >
+                      <CalendarDays size={16} aria-hidden="true" />
+                      <span class="button__label">Emploi du temps</span>
+                    </button>
+                  }
                 >
-                  Grille
-                </button>
-                <button
-                  type="button"
-                  class="button button--on-accent"
-                  aria-pressed={settings().view === 'list'}
-                  onClick={() => update({ view: 'list' })}
-                >
-                  Liste
-                </button>
-                <button
-                  type="button"
-                  class="button button--on-accent"
-                  title="Exporter la semaine (.ics)"
-                  disabled={!data()}
-                  onClick={() => {
-                    const loadedWeek = data();
-                    if (loadedWeek) {
-                      downloadIcs(loadedWeek.filtered, loadedWeek.filtered.courses, settings().group);
-                    }
-                  }}
-                >
-                  <Download size={16} aria-hidden="true" />
-                  .ics
-                </button>
+                  <button
+                    type="button"
+                    class="button button--on-accent"
+                    aria-pressed={settings().view === 'grid'}
+                    onClick={() => update({ view: 'grid' })}
+                  >
+                    Grille
+                  </button>
+                  <button
+                    type="button"
+                    class="button button--on-accent"
+                    aria-pressed={settings().view === 'list'}
+                    onClick={() => update({ view: 'list' })}
+                  >
+                    Liste
+                  </button>
+                  <button
+                    type="button"
+                    class="button button--on-accent"
+                    title="Exporter la semaine (.ics)"
+                    disabled={!data()}
+                    onClick={() => {
+                      const loadedWeek = data();
+                      if (loadedWeek) {
+                        downloadIcs(loadedWeek.filtered, loadedWeek.filtered.courses, settings().group);
+                      }
+                    }}
+                  >
+                    <Download size={16} aria-hidden="true" />
+                    .ics
+                  </button>
+                  <button
+                    type="button"
+                    class="button button--on-accent"
+                    title="Salles libres"
+                    aria-label="Salles libres"
+                    onClick={() => goTo('rooms')}
+                  >
+                    <DoorOpen size={16} aria-hidden="true" />
+                    <span class="button__label">Salles</span>
+                  </button>
+                </Show>
                 <button
                   type="button"
                   class="button button--on-accent"
@@ -182,111 +242,116 @@ export function App() {
               </div>
             </header>
 
-            {/* Les deux cartes de tête chevauchent le bas du bandeau. */}
-            <div class="summary">
-              <Show when={todayWeek()} fallback={<div />}>
-                {(current) => <StatusCard courses={current().courses} />}
-              </Show>
+            <Show
+              when={page() === 'timetable'}
+              fallback={<RoomsPage years={loaded()} onSelect={setSelected} />}
+            >
+              {/* Les deux cartes de tête chevauchent le bas du bandeau. */}
+              <div class="summary">
+                <Show when={todayWeek()} fallback={<div />}>
+                  {(current) => <StatusCard courses={current().courses} />}
+                </Show>
 
-              <div class="card week-summary">
-                <div class="week-summary__info">
-                  <span class="week-summary__number">{`Semaine ${week() ?? '—'}`}</span>
-                  <Show when={data()}>
-                    {(loadedWeek) => (
-                      <span class="week-summary__period">{periodLabel(loadedWeek().filtered)}</span>
-                    )}
-                  </Show>
-                  <Show when={workload() > 0}>
-                    <span class="week-summary__workload">{humanDuration(workload())}</span>
-                  </Show>
-                </div>
-
-                <div class="week-summary__nav">
-                  <Show when={currentWeek() !== undefined && week() !== currentWeek()}>
-                    <button
-                      type="button"
-                      class="button"
-                      onClick={() => {
-                        setWeek(currentWeek() ?? null);
-                        setSelected(null);
-                      }}
-                    >
-                      Aujourd'hui
-                    </button>
-                  </Show>
-                  <button
-                    type="button"
-                    class="button button--round"
-                    onClick={() => step(-1)}
-                    disabled={weeks().indexOf(week() ?? -1) <= 0}
-                    aria-label="Semaine précédente"
-                  >
-                    <ChevronLeft size={18} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    class="button button--round"
-                    onClick={() => step(1)}
-                    disabled={weeks().indexOf(week() ?? -1) >= weeks().length - 1}
-                    aria-label="Semaine suivante"
-                  >
-                    <ChevronRight size={18} aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <main class="app__timetable">
-              <Show
-                when={data()}
-                fallback={
-                  <div class="centered">
-                    <Show when={error()} fallback={<p>Chargement de la semaine…</p>}>
-                      <p>
-                        {error() instanceof ApiError && (error() as ApiError).isMissing
-                          ? `Aucun emploi du temps publié pour la semaine ${week()}.`
-                          : `Emploi du temps indisponible : ${(error() as Error).message}`}
-                      </p>
+                <div class="card week-summary">
+                  <div class="week-summary__info">
+                    <span class="week-summary__number">{`Semaine ${week() ?? '—'}`}</span>
+                    <Show when={data()}>
+                      {(loadedWeek) => (
+                        <span class="week-summary__period">{periodLabel(loadedWeek().filtered)}</span>
+                      )}
+                    </Show>
+                    <Show when={workload() > 0}>
+                      <span class="week-summary__workload">{humanDuration(workload())}</span>
                     </Show>
                   </div>
-                }
-              >
-                {(loadedWeek) => (
-                  <Show
-                    when={loadedWeek().filtered.courses.length > 0}
-                    fallback={
-                      <div class="centered">
-                        <p>{`Aucun cours pour ${groupLabel(settings().group ?? '')} cette semaine.`}</p>
-                      </div>
-                    }
-                  >
-                    <WeekView
-                      week={loadedWeek().filtered}
-                      days={weekDays(loadedWeek().structure)}
-                      view={settings().view}
-                      onSelect={setSelected}
-                    />
-                  </Show>
-                )}
-              </Show>
-            </main>
 
-            <footer class="app__footer">
-              <Show when={data()}>
-                {(loadedWeek) => (
-                  <>
-                    <span>{`${loadedWeek().filtered.count} cours · lus dans le PDF du département`}</span>
-                    <a
-                      href={loadedWeek().filtered.source.url}
-                      target="_blank"
-                      rel="noreferrer"
+                  <div class="week-summary__nav">
+                    <Show when={currentWeek() !== undefined && week() !== currentWeek()}>
+                      <button
+                        type="button"
+                        class="button"
+                        onClick={() => {
+                          setWeek(currentWeek() ?? null);
+                          setSelected(null);
+                        }}
+                      >
+                        Aujourd'hui
+                      </button>
+                    </Show>
+                    <button
+                      type="button"
+                      class="button button--round"
+                      onClick={() => step(-1)}
+                      disabled={weeks().indexOf(week() ?? -1) <= 0}
+                      aria-label="Semaine précédente"
                     >
-                      PDF d'origine
-                    </a>
-                  </>
-                )}
-              </Show>
-            </footer>
+                      <ChevronLeft size={18} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      class="button button--round"
+                      onClick={() => step(1)}
+                      disabled={weeks().indexOf(week() ?? -1) >= weeks().length - 1}
+                      aria-label="Semaine suivante"
+                    >
+                      <ChevronRight size={18} aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <main class="app__timetable">
+                <Show
+                  when={data()}
+                  fallback={
+                    <div class="centered">
+                      <Show when={error()} fallback={<p>Chargement de la semaine…</p>}>
+                        <p>
+                          {error() instanceof ApiError && (error() as ApiError).isMissing
+                            ? `Aucun emploi du temps publié pour la semaine ${week()}.`
+                            : `Emploi du temps indisponible : ${(error() as Error).message}`}
+                        </p>
+                      </Show>
+                    </div>
+                  }
+                >
+                  {(loadedWeek) => (
+                    <Show
+                      when={loadedWeek().filtered.courses.length > 0}
+                      fallback={
+                        <div class="centered">
+                          <p>{`Aucun cours pour ${groupLabel(settings().group ?? '')} cette semaine.`}</p>
+                        </div>
+                      }
+                    >
+                      <WeekView
+                        week={loadedWeek().filtered}
+                        days={weekDays(loadedWeek().structure)}
+                        view={settings().view}
+                        onSelect={setSelected}
+                      />
+                    </Show>
+                  )}
+                </Show>
+              </main>
+
+              <footer class="app__footer">
+                <Show when={data()}>
+                  {(loadedWeek) => (
+                    <>
+                      <span>{`${loadedWeek().filtered.count} cours · lus dans le PDF du département`}</span>
+                      <a
+                        href={loadedWeek().filtered.source.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        PDF d'origine
+                      </a>
+                    </>
+                  )}
+                </Show>
+              </footer>
+            </Show>
 
             <CourseModal course={selected()} onClose={() => setSelected(null)} />
 
@@ -294,6 +359,8 @@ export function App() {
               open={showSettings()}
               bases={bases()}
               years={loaded().map((item) => item.year)}
+              reloading={years.loading || data.loading || todayWeek.loading}
+              onReload={reload}
               onClose={() => setShowSettings(false)}
             />
           </div>

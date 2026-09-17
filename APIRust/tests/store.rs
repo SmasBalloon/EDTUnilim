@@ -153,3 +153,33 @@ async fn keeps_the_cached_entry_when_refresh_finds_nothing_new() {
     let after = store.timetable(1, 3).await.expect("toujours en cache").fetched_at;
     assert_eq!(before, after, "un 304 ne doit pas remplacer l'entrée en cache");
 }
+
+#[tokio::test]
+async fn revalidates_a_week_on_demand_but_not_twice_in_a_row() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .and(header("if-none-match", "\"v1\""))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A1_S3).insert_header("etag", "\"v2\""))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A1_S3).insert_header("etag", "\"v1\""))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let store = Store::new(&config(&server, cache_dir.path())).expect("store construit");
+
+    let before = store.timetable(1, 3).await.expect("premier téléchargement réussi").fetched_at;
+
+    store.revalidate_timetable(1, 3).await;
+    let after = store.timetable(1, 3).await.expect("nouvelle version en cache").fetched_at;
+    assert!(after > before, "une nouvelle version doit remplacer l'entrée en cache");
+
+    // Revalidation immédiate : ignorée, le mock refuserait un troisième appel.
+    store.revalidate_timetable(1, 3).await;
+}

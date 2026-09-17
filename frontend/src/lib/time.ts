@@ -81,20 +81,24 @@ function nearest(weeks: number[], target: number): number {
 }
 
 /**
- * Trouve la semaine qui contient aujourd'hui.
+ * Trouve la semaine qui contient un jour donné, aujourd'hui par défaut.
  *
  * Les numéros de semaine sont ceux du département (`S1`, `S2`, …), sans lien
  * fixe avec le calendrier : on lit donc la période d'une semaine publiée, on
- * mesure l'écart en semaines avec aujourd'hui, et on saute d'autant. Deux
+ * mesure l'écart en semaines avec le jour visé, et on saute d'autant. Deux
  * lectures suffisent en pratique.
  */
-export async function resolveCurrentWeek(year: number, summary: YearSummary): Promise<number> {
+export async function resolveCurrentWeek(
+  year: number,
+  summary: YearSummary,
+  day: Date = new Date(),
+): Promise<number> {
   const weeks = summary.weeks;
   const first = weeks[0];
   if (first === undefined) throw new Error('aucune semaine publiée');
 
   let candidate = weeks[weeks.length - 1] ?? first;
-  const today = startOfDay(new Date()).getTime();
+  const today = startOfDay(day).getTime();
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const week = await fetchWeek(year, candidate);

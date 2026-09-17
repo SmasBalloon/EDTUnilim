@@ -1,7 +1,6 @@
 import { For, Show, type Component } from 'solid-js';
 import { X } from 'lucide-solid';
 
-import { clearCache } from '../lib/api';
 import { settings, update, type Theme, type ViewMode } from '../lib/settings';
 import { GroupPicker } from './GroupPicker';
 
@@ -10,6 +9,9 @@ interface Props {
   /** Groupes principaux disponibles pour l'année suivie. */
   bases: string[];
   years: number[];
+  /** Vrai pendant une relecture des emplois du temps. */
+  reloading: boolean;
+  onReload: () => void;
   onClose: () => void;
 }
 
@@ -102,12 +104,10 @@ export const SettingsSheet: Component<Props> = (props) => (
           <button
             type="button"
             class="button button--block"
-            onClick={() => {
-              clearCache();
-              location.reload();
-            }}
+            disabled={props.reloading}
+            onClick={props.onReload}
           >
-            Recharger les emplois du temps
+            {props.reloading ? 'Rechargement…' : 'Recharger les emplois du temps'}
           </button>
         </div>
       </div>
