@@ -1,10 +1,12 @@
 import { For, Show, createMemo, createResource, createSignal, type Component } from 'solid-js';
+import { X } from 'lucide-solid';
 
 import type { Course, YearSummary } from '../lib/api';
 import { groupLabel } from '../lib/groups';
 import { DAY_END, DAY_START, KIND_LABEL } from '../lib/layout';
 import {
   atTime,
+  byFloor,
   formatMinutes,
   loadRooms,
   roomDays,
@@ -34,16 +36,26 @@ function describe(course: Course): string {
 
 /**
  * Salles libres et occupées. Par défaut l'instant suit l'horloge ; on peut
- * aussi choisir un jour et une heure, puis revenir au temps réel.
+ * aussi choisir un jour, une heure de début et, pour une plage, une heure de
+ * fin — puis revenir au temps réel.
  */
 export const RoomsPage: Component<Props> = (props) => {
-  /** Instant choisi, ou `null` pour suivre l'heure courante. */
+  /** Début choisi, ou `null` pour suivre l'heure courante. */
   const [pinned, setPinned] = createSignal<Date | null>(null);
+  /** Fin de plage en minutes, ou `null` pour un simple instant. */
+  const [end, setEnd] = createSignal<number | null>(null);
   const [mode, setMode] = createSignal<Mode>('state');
 
   const instant = () => pinned() ?? clock();
   const date = createMemo(() => todayIso(instant()));
   const minutes = createMemo(() => nowMinutes(instant()));
+
+  /** La plage n'a de sens que si sa fin suit son début. */
+  const rangeEnd = createMemo(() => {
+    const value = end();
+    return value !== null && value > minutes() ? value : null;
+  });
+  const invalidRange = () => end() !== null && rangeEnd() === null;
 
   const [data] = createResource(
     () => ({ years: props.years, date: date() }),
@@ -55,12 +67,23 @@ export const RoomsPage: Component<Props> = (props) => {
     return loaded ? roomDays(loaded.courses, date()) : [];
   });
 
-  const states = createMemo(() => rooms().map((room) => roomState(room, minutes())));
+  const states = createMemo(() =>
+    rooms().map((room) => roomState(room, minutes(), rangeEnd() ?? undefined)),
+  );
   const free = () => states().filter((state) => state.free);
   const busy = () => states().filter((state) => !state.free);
 
   const pin = (day: string, time: string) => {
     if (day && time) setPinned(atTime(day, time));
+  };
+
+  const caption = () => {
+    const prefix = pinned() === null && rangeEnd() === null ? 'En ce moment' : 'Le';
+    const span =
+      rangeEnd() === null
+        ? `à ${formatMinutes(minutes())}`
+        : `de ${formatMinutes(minutes())} à ${formatMinutes(rangeEnd()!)}`;
+    return `${prefix} ${longDate(date())} ${span}`;
   };
 
   return (
@@ -75,19 +98,54 @@ export const RoomsPage: Component<Props> = (props) => {
               value={date()}
               onChange={(event) => pin(event.currentTarget.value, formatMinutes(minutes()))}
             />
-            <input
-              class="input"
-              type="time"
-              step="300"
-              aria-label="Heure"
-              value={formatMinutes(minutes())}
-              onChange={(event) => pin(date(), event.currentTarget.value)}
-            />
+            <label class="rooms-controls__field">
+              <span>De</span>
+              <input
+                class="input"
+                type="time"
+                step="300"
+                aria-label="Heure de début"
+                value={formatMinutes(minutes())}
+                onChange={(event) => pin(date(), event.currentTarget.value)}
+              />
+            </label>
+            <label class="rooms-controls__field">
+              <span>à</span>
+              <input
+                class="input"
+                classList={{ 'input--invalid': invalidRange() }}
+                type="time"
+                step="300"
+                aria-label="Heure de fin (facultative)"
+                value={end() === null ? '' : formatMinutes(end()!)}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  if (!value) return setEnd(null);
+                  // Saisir une fin fige le début là où il en est.
+                  if (pinned() === null) setPinned(instant());
+                  setEnd(toMinutes(value));
+                }}
+              />
+            </label>
+            <Show when={end() !== null}>
+              <button
+                type="button"
+                class="button"
+                aria-label="Retirer l'heure de fin"
+                title="Retirer l'heure de fin"
+                onClick={() => setEnd(null)}
+              >
+                <X size={14} aria-hidden="true" />
+              </button>
+            </Show>
             <button
               type="button"
               class="button"
-              aria-pressed={pinned() === null}
-              onClick={() => setPinned(null)}
+              aria-pressed={pinned() === null && end() === null}
+              onClick={() => {
+                setPinned(null);
+                setEnd(null);
+              }}
             >
               Maintenant
             </button>
@@ -111,6 +169,10 @@ export const RoomsPage: Component<Props> = (props) => {
               Planning
             </button>
           </div>
+
+          <Show when={invalidRange()}>
+            <p class="rooms-controls__hint">L'heure de fin doit être après l'heure de début.</p>
+          </Show>
         </div>
       </div>
 
@@ -140,6 +202,7 @@ export const RoomsPage: Component<Props> = (props) => {
                   <RoomPlanning
                     rooms={rooms()}
                     minutes={minutes()}
+                    end={rangeEnd()}
                     live={pinned() === null}
                     onSelect={props.onSelect}
                     onPick={(m) => pin(date(), formatMinutes(m))}
@@ -147,11 +210,19 @@ export const RoomsPage: Component<Props> = (props) => {
                 }
               >
                 <div class="rooms-state">
-                  <p class="rooms-state__caption">
-                    {`${pinned() === null ? 'En ce moment' : 'Le'} ${longDate(date())} à ${formatMinutes(minutes())}`}
-                  </p>
-                  <RoomSection title="Libres" states={free()} onSelect={props.onSelect} />
-                  <RoomSection title="Occupées" states={busy()} onSelect={props.onSelect} />
+                  <p class="rooms-state__caption">{caption()}</p>
+                  <RoomSection
+                    title={rangeEnd() === null ? 'Libres' : 'Libres sur toute la plage'}
+                    states={free()}
+                    range={rangeEnd() !== null}
+                    onSelect={props.onSelect}
+                  />
+                  <RoomSection
+                    title={rangeEnd() === null ? 'Occupées' : 'Occupées sur la plage'}
+                    states={busy()}
+                    range={rangeEnd() !== null}
+                    onSelect={props.onSelect}
+                  />
                 </div>
               </Show>
             </Show>
@@ -169,6 +240,8 @@ export const RoomsPage: Component<Props> = (props) => {
 const RoomSection: Component<{
   title: string;
   states: RoomState[];
+  /** Vrai quand on regarde une plage plutôt qu'un instant. */
+  range: boolean;
   onSelect: (course: Course) => void;
 }> = (props) => (
   <section class="rooms-section">
@@ -176,35 +249,59 @@ const RoomSection: Component<{
       {props.title} <span class="rooms-section__count">{props.states.length}</span>
     </h2>
     <Show when={props.states.length > 0} fallback={<p class="rooms-section__empty">Aucune.</p>}>
-      <div class="rooms-section__list">
-        <For each={props.states}>
-          {(state) => (
-            <Show
-              when={!state.free && state}
-              fallback={
-                <div class="room-card room-card--free">
-                  <span class="room-card__name">{state.room.room}</span>
-                  <span class="room-card__until">
-                    {state.until === null ? 'libre jusqu’au soir' : `libre jusqu’à ${formatMinutes(state.until)}`}
-                  </span>
-                </div>
-              }
-            >
-              {(occupied) => (
-                <button
-                  type="button"
-                  class={`room-card room-card--busy kind-${occupied().course.kind}`}
-                  onClick={() => props.onSelect(occupied().course)}
-                >
-                  <span class="room-card__name">{occupied().room.room}</span>
-                  <span class="room-card__until">{`jusqu’à ${formatMinutes(occupied().until)}`}</span>
-                  <span class="room-card__course">{describe(occupied().course)}</span>
-                </button>
-              )}
-            </Show>
-          )}
-        </For>
-      </div>
+      <For each={byFloor(props.states, (state) => state.room.room)}>
+        {(group) => (
+          <div class="rooms-floor">
+            <h3 class="rooms-floor__title">
+              <span class="rooms-floor__name">{group.floor.name}</span>
+              {group.floor.label}
+            </h3>
+            <div class="rooms-section__list">
+              <For each={group.items}>
+                {(state) => (
+                  <Show
+                    when={!state.free && state}
+                    fallback={
+                      <div class="room-card room-card--free">
+                        <span class="room-card__name">{state.room.room}</span>
+                        <span class="room-card__until">
+                          {state.until === null
+                            ? 'libre jusqu’au soir'
+                            : `libre jusqu’à ${formatMinutes(state.until)}`}
+                        </span>
+                      </div>
+                    }
+                  >
+                    {(occupied) => (
+                      <div class={`room-card room-card--busy kind-${occupied().courses[0]!.kind}`}>
+                        <span class="room-card__name">{occupied().room.room}</span>
+                        <Show when={!props.range}>
+                          <span class="room-card__until">
+                            {`jusqu’à ${formatMinutes(occupied().until)}`}
+                          </span>
+                        </Show>
+                        <For each={props.range ? occupied().courses : occupied().courses.slice(0, 1)}>
+                          {(course) => (
+                            <button
+                              type="button"
+                              class="room-card__course"
+                              onClick={() => props.onSelect(course)}
+                            >
+                              {props.range
+                                ? `${course.start}–${course.end} · ${describe(course)}`
+                                : describe(course)}
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                    )}
+                  </Show>
+                )}
+              </For>
+            </div>
+          </div>
+        )}
+      </For>
     </Show>
   </section>
 );
@@ -212,10 +309,11 @@ const RoomSection: Component<{
 /** Largeur d'une heure dans le planning, en pixels. */
 const HOUR_WIDTH = 88;
 
-/** Une ligne par salle sur l'échelle horaire de la journée. */
+/** Une ligne par salle sur l'échelle horaire de la journée, regroupées par étage. */
 const RoomPlanning: Component<{
   rooms: RoomDay[];
   minutes: number;
+  end: number | null;
   live: boolean;
   onSelect: (course: Course) => void;
   onPick: (minutes: number) => void;
@@ -229,6 +327,7 @@ const RoomPlanning: Component<{
 
   const width = () => ((bounds().end - bounds().start) / 60) * HOUR_WIDTH;
   const offset = (m: number) => ((m - bounds().start) / 60) * HOUR_WIDTH;
+  const clamp = (m: number) => Math.min(Math.max(m, bounds().start), bounds().end);
 
   const hours = createMemo(() => {
     const list: number[] = [];
@@ -236,12 +335,13 @@ const RoomPlanning: Component<{
     return list;
   });
 
+  const floors = createMemo(() => byFloor(props.rooms, (room) => room.room));
+
   /** Un clic sur une zone libre place l'heure choisie, arrondie au quart d'heure. */
   const pick = (event: MouseEvent) => {
     const track = event.currentTarget as HTMLElement;
     const x = event.clientX - track.getBoundingClientRect().left;
-    const m = bounds().start + Math.round(((x / HOUR_WIDTH) * 60) / 15) * 15;
-    props.onPick(Math.min(Math.max(m, bounds().start), bounds().end));
+    props.onPick(clamp(bounds().start + Math.round(((x / HOUR_WIDTH) * 60) / 15) * 15));
   };
 
   const showNow = () => props.minutes >= bounds().start && props.minutes <= bounds().end;
@@ -259,47 +359,73 @@ const RoomPlanning: Component<{
         </For>
       </div>
 
-      <For each={props.rooms}>
-        {(room) => {
-          const state = () => roomState(room, props.minutes);
-          return (
-            <>
-              <div class="room-planning__room" classList={{ 'room-planning__room--busy': !state().free }}>
-                <span class="room-planning__dot" aria-hidden="true" />
-                {room.room}
-              </div>
-              <div class="room-planning__track" onClick={pick}>
-                <For each={room.courses}>
-                  {(course) => (
-                    <button
-                      type="button"
-                      class={`room-planning__slot kind-${course.kind}`}
-                      style={{
-                        left: `${offset(toMinutes(course.start)) + 1}px`,
-                        width: `${offset(toMinutes(course.end)) - offset(toMinutes(course.start)) - 2}px`,
-                      }}
-                      title={`${course.start} – ${course.end} · ${describe(course)}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        props.onSelect(course);
-                      }}
+      <For each={floors()}>
+        {(group) => (
+          <>
+            <div class="room-planning__floor">
+              <span class="rooms-floor__name">{group.floor.name}</span>
+              {group.floor.label}
+            </div>
+            <div class="room-planning__floor-track" />
+
+            <For each={group.items}>
+              {(room) => {
+                const state = () => roomState(room, props.minutes, props.end ?? undefined);
+                return (
+                  <>
+                    <div
+                      class="room-planning__room"
+                      classList={{ 'room-planning__room--busy': !state().free }}
                     >
-                      <span class="room-planning__slot-kind">{KIND_LABEL[course.kind]}</span>
-                      {course.resource?.code ?? course.title ?? ''}
-                    </button>
-                  )}
-                </For>
-                <Show when={showNow()}>
-                  <div
-                    class="room-planning__now"
-                    classList={{ 'room-planning__now--pinned': !props.live }}
-                    style={{ left: `${offset(props.minutes)}px` }}
-                  />
-                </Show>
-              </div>
-            </>
-          );
-        }}
+                      <span class="room-planning__dot" aria-hidden="true" />
+                      {room.room}
+                    </div>
+                    <div class="room-planning__track" onClick={pick}>
+                      <Show when={props.end}>
+                        {(end) => (
+                          <div
+                            class="room-planning__range"
+                            style={{
+                              left: `${offset(clamp(props.minutes))}px`,
+                              width: `${offset(clamp(end())) - offset(clamp(props.minutes))}px`,
+                            }}
+                          />
+                        )}
+                      </Show>
+                      <For each={room.courses}>
+                        {(course) => (
+                          <button
+                            type="button"
+                            class={`room-planning__slot kind-${course.kind}`}
+                            style={{
+                              left: `${offset(toMinutes(course.start)) + 1}px`,
+                              width: `${offset(toMinutes(course.end)) - offset(toMinutes(course.start)) - 2}px`,
+                            }}
+                            title={`${course.start} – ${course.end} · ${describe(course)}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              props.onSelect(course);
+                            }}
+                          >
+                            <span class="room-planning__slot-kind">{KIND_LABEL[course.kind]}</span>
+                            {course.resource?.code ?? course.title ?? ''}
+                          </button>
+                        )}
+                      </For>
+                      <Show when={showNow() && props.end === null}>
+                        <div
+                          class="room-planning__now"
+                          classList={{ 'room-planning__now--pinned': !props.live }}
+                          style={{ left: `${offset(props.minutes)}px` }}
+                        />
+                      </Show>
+                    </div>
+                  </>
+                );
+              }}
+            </For>
+          </>
+        )}
       </For>
     </div>
   );

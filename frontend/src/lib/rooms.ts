@@ -50,7 +50,7 @@ export function roomDays(weekCourses: Course[], date: string): RoomDay[] {
   }
 
   return [...rooms.entries()]
-    .sort(([a], [b]) => COLLATOR.compare(a, b))
+    .sort(([a], [b]) => floorOf(a).rank - floorOf(b).rank || COLLATOR.compare(a, b))
     .map(([room, courses]) => {
       const sorted = [...courses].sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
       const busy: Interval[] = [];
@@ -71,19 +71,51 @@ export function roomDays(weekCourses: Course[], date: string): RoomDay[] {
 
 export type RoomState =
   | { free: true; room: RoomDay; until: number | null }
-  | { free: false; room: RoomDay; until: number; course: Course };
+  | { free: false; room: RoomDay; until: number; courses: Course[] };
 
-/** Libre ou occupée à un instant de la journée, et jusqu'à quand. */
-export function roomState(room: RoomDay, minutes: number): RoomState {
-  const current = room.busy.find((slot) => slot.start <= minutes && slot.end > minutes);
-  if (current) {
-    const course =
-      current.courses.find((item) => toMinutes(item.start) <= minutes && toMinutes(item.end) > minutes) ??
-      current.courses[0]!;
-    return { free: false, room, until: current.end, course };
+/**
+ * Libre ou occupée sur une plage de la journée, `[start, end[` ; sans `end`,
+ * à l'instant `start`. Libre veut dire libre sur toute la plage.
+ */
+export function roomState(room: RoomDay, start: number, end: number = start + 1): RoomState {
+  const courses = room.courses.filter(
+    (course) => toMinutes(course.start) < end && toMinutes(course.end) > start,
+  );
+  if (courses.length === 0) {
+    const next = room.busy.find((slot) => slot.start >= end);
+    return { free: true, room, until: next?.start ?? null };
   }
-  const next = room.busy.find((slot) => slot.start > minutes);
-  return { free: true, room, until: next?.start ?? null };
+  const last = room.busy.filter((slot) => slot.start < end && slot.end > start).at(-1);
+  return { free: false, room, until: last?.end ?? end, courses };
+}
+
+export interface Floor {
+  /** `R`, `100`, `200`… */
+  name: string;
+  label: string;
+}
+
+/** Étage d'une salle : `R46` au rez-de-chaussée, `103` au premier, `208` au deuxième. */
+function floorOf(room: string): { rank: number; name: string; label: string } {
+  if (/^R\d/i.test(room)) return { rank: 0, name: 'R', label: 'Rez-de-chaussée' };
+  const level = /^(\d)\d\d/.exec(room)?.[1];
+  if (level !== undefined) {
+    const n = Number(level);
+    return { rank: n, name: `${n}00`, label: n === 1 ? '1er étage' : `${n}e étage` };
+  }
+  return { rank: 99, name: 'Autres', label: 'Hors étages' };
+}
+
+/** Salles réparties par étage, du rez-de-chaussée vers le haut. */
+export function byFloor<T>(items: T[], room: (item: T) => string): { floor: Floor; items: T[] }[] {
+  const floors = new Map<string, { rank: number; floor: Floor; items: T[] }>();
+  for (const item of items) {
+    const { rank, name, label } = floorOf(room(item));
+    const entry = floors.get(name) ?? { rank, floor: { name, label }, items: [] };
+    entry.items.push(item);
+    floors.set(name, entry);
+  }
+  return [...floors.values()].sort((a, b) => a.rank - b.rank).map(({ floor, items: list }) => ({ floor, items: list }));
 }
 
 /** `14:05` à partir de minutes depuis minuit. */
