@@ -127,3 +127,64 @@ export function clearCache(): void {
   for (const key of cache.keys()) stale.add(key);
   cache.clear();
 }
+
+/** La personne connectée avec Discord. */
+export interface Me {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  year: number | null;
+  /** Demi-groupe suivi : `G1a`. */
+  group: string | null;
+  /** Recevoir les emplois du temps et leurs changements en message privé. */
+  notify: boolean;
+}
+
+/** Issue du message privé de confirmation. */
+export type Delivery = 'none' | 'sent' | 'closed' | 'failed';
+
+/** Requête vers les routes du compte : jamais mises en cache. */
+async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}${path}`, {
+      method,
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: body === undefined ? { accept: 'application/json' } : { accept: 'application/json', 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError('offline', 'service injoignable — vérifie ta connexion', 0);
+  }
+  if (!response.ok) {
+    const error = (await response.json().catch(() => null)) as { error?: string; message?: string } | null;
+    throw new ApiError(error?.error ?? 'http_error', error?.message ?? `erreur ${response.status}`, response.status);
+  }
+  return (response.status === 204 ? undefined : await response.json()) as T;
+}
+
+/** Le compte connecté, ou `null` sans session. */
+export async function fetchMe(): Promise<Me | null> {
+  try {
+    return await send<Me>('GET', '/api/v1/me');
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'unauthenticated') return null;
+    throw error;
+  }
+}
+
+export function saveMe(change: Pick<Me, 'year' | 'group' | 'notify'>): Promise<{ user: Me; dm: Delivery }> {
+  return send('PUT', '/api/v1/me', change);
+}
+
+export function logout(): Promise<void> {
+  return send('POST', '/api/v1/auth/logout');
+}
+
+export function deleteAccount(): Promise<void> {
+  return send('DELETE', '/api/v1/me');
+}
+
+/** Page d'autorisation Discord, via l'API qui prépare l'aller-retour. */
+export const LOGIN_URL = `${BASE}/api/v1/auth/login`;

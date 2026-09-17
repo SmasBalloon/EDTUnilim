@@ -108,12 +108,7 @@ pub async fn week(
         .courses
         .iter()
         .filter(|course| filters.day.as_deref().is_none_or(|day| matches_day(&course.day, day)))
-        .filter(|course| {
-            filters
-                .group
-                .as_deref()
-                .is_none_or(|wanted| course.groups.iter().any(|group| matches_group(group, wanted)))
-        })
+        .filter(|course| filters.group.as_deref().is_none_or(|wanted| course.concerns(wanted)))
         .collect();
 
     let body = WeekResponse {
@@ -132,29 +127,9 @@ fn matches_day(day: &str, wanted: &str) -> bool {
     day.eq_ignore_ascii_case(wanted.trim())
 }
 
-/// Un créneau de `G1` concerne aussi bien `G1a` que `G1b`, et réciproquement :
-/// demander `G1a` doit rendre les cours du groupe entier.
-fn matches_group(group: &str, wanted: &str) -> bool {
-    let (group, wanted) = (group.trim(), wanted.trim());
-    let common = group.len().min(wanted.len());
-    common > 0
-        && group.is_char_boundary(common)
-        && wanted.is_char_boundary(common)
-        && group[..common].eq_ignore_ascii_case(&wanted[..common])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn group_filter_spans_half_groups() {
-        assert!(matches_group("G1", "G1a"));
-        assert!(matches_group("G1a", "G1"));
-        assert!(matches_group("G1a", "g1a"));
-        assert!(!matches_group("G1a", "G1b"));
-        assert!(!matches_group("G2", "G1"));
-    }
 
     #[test]
     fn detects_an_explicit_reload() {

@@ -16,7 +16,7 @@ const A1_S3: &[u8] = include_bytes!("fixtures/A1_S3.pdf");
 fn server() -> TestServer {
     let config = Config::from_env().expect("configuration par défaut valide");
     let store = Arc::new(Store::new(&config).expect("client HTTP construit"));
-    TestServer::new(http::router(&config, store))
+    TestServer::new(http::router(&config, store, None))
 }
 
 fn server_with(upstream: &MockServer) -> TestServer {
@@ -26,10 +26,12 @@ fn server_with(upstream: &MockServer) -> TestServer {
         cache_dir: std::env::temp_dir().join(format!("edt-http-test-{}", uuid())),
         refresh_interval: Duration::from_secs(3600),
         upstream_timeout: Duration::from_secs(5),
-        discord_webhook: None,
+        state_dir: std::env::temp_dir(),
+        public_url: "http://localhost:8080".into(),
+        discord: None,
     };
     let store = Arc::new(Store::new(&config).expect("client HTTP construit"));
-    TestServer::new(http::router(&config, store))
+    TestServer::new(http::router(&config, store, None))
 }
 
 fn uuid() -> u64 {

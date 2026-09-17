@@ -48,6 +48,11 @@ export const Setup: Component<{ years: YearSummary[] }> = (props) => {
           </div>
         </section>
 
+        <p class="setup__note">
+          Ou <a class="setup__link" href="#compte">connecte-toi avec Discord</a> pour recevoir ton emploi du
+          temps et ses changements en message privé.
+        </p>
+
         <Show when={year() !== null}>
           <section class="field">
             <Show when={!bases.loading} fallback={<p class="setup__note">Lecture des groupes…</p>}>

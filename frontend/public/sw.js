@@ -6,7 +6,7 @@
  * version connue — l'emploi du temps consulté reste donc lisible hors ligne.
  */
 
-const SHELL = 'edt-shell-v1';
+const SHELL = 'edt-shell-v2';
 const DATA = 'edt-data-v1';
 
 self.addEventListener('install', (event) => {
@@ -33,6 +33,9 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  // Connexion et compte : toujours le réseau, jamais de copie gardée.
+  if (url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/v1/years')) return;
 
   // Données : réseau d'abord, cache en secours.
   if (url.pathname.startsWith('/api/')) {

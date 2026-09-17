@@ -22,7 +22,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --home /app edt \
-    && mkdir -p /app/cache && chown -R edt:edt /app
+    && mkdir -p /app/cache /app/state && chown -R edt:edt /app
 
 WORKDIR /app
 COPY --from=builder /build/target/release/edt-unilim-api /usr/local/bin/edt-unilim-api
@@ -30,9 +30,10 @@ COPY --from=builder /build/target/release/edt-unilim-api /usr/local/bin/edt-unil
 USER edt
 ENV EDT_BIND=0.0.0.0:3000 \
     EDT_CACHE_DIR=/app/cache \
+    EDT_STATE_DIR=/app/state \
     EDT_LOG=info
 EXPOSE 3000
-VOLUME ["/app/cache"]
+VOLUME ["/app/cache", "/app/state"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS http://localhost:3000/health || exit 1

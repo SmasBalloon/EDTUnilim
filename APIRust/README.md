@@ -85,7 +85,12 @@ Tout est optionnel ; les valeurs par défaut suffisent en développement.
 | `EDT_CACHE_DIR` | `cache` | cache disque des PDF |
 | `EDT_REFRESH_SECONDS` | `900` | périodicité de la revalidation |
 | `EDT_UPSTREAM_TIMEOUT_SECONDS` | `15` | délai accordé au serveur amont |
-| `EDT_DISCORD_WEBHOOK` | — | webhook Discord : signale les créneaux modifiés, ajoutés ou retirés, et les semaines publiées |
+| `EDT_PUBLIC_URL` | `http://localhost:8080` | adresse publique du site, base de l'URL de retour OAuth |
+| `EDT_DISCORD_CLIENT_ID`, `EDT_DISCORD_CLIENT_SECRET` | — | application Discord (OAuth2) |
+| `EDT_DISCORD_BOT_TOKEN` | — | bot qui envoie les messages privés |
+| `EDT_DISCORD_GUILD_ID` | — | serveur où les personnes connectées sont ajoutées |
+| `EDT_SESSION_SECRET` | — | clé de signature des sessions (32 caractères au moins) |
+| `EDT_STATE_DIR` | `state` | comptes et classes suivies (`users.json`) |
 | `EDT_LOG` | `info` | filtre de journalisation (`tracing`) |
 
 ## Fonctionnement

@@ -18,6 +18,9 @@ pub async fn index() -> Json<Value> {
             "GET /api/v1/years/{year}/weeks": "semaines disponibles pour une année",
             "GET /api/v1/years/{year}/weeks/{week}": "emploi du temps ; filtres ?group=G1a et ?day=lundi",
             "GET /api/v1/resources": "référentiel des ressources et SAÉ",
+            "GET /api/v1/auth/login": "connexion avec Discord",
+            "POST /api/v1/auth/logout": "déconnexion",
+            "GET|PUT|DELETE /api/v1/me": "compte : classe suivie et messages privés",
         },
     }))
 }

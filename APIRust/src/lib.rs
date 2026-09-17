@@ -6,10 +6,14 @@
 
 pub mod catalog;
 pub mod config;
+pub mod discord;
 pub mod error;
 pub mod http;
+pub mod ics;
 pub mod model;
 pub mod notify;
 pub mod pdf;
+pub mod session;
 pub mod store;
 pub mod upstream;
+pub mod users;

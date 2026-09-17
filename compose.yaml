@@ -15,13 +15,21 @@ services:
       # Périodicité de la revalidation des emplois du temps déjà consultés.
       EDT_REFRESH_SECONDS: ${EDT_REFRESH_SECONDS:-900}
       EDT_UPSTREAM_TIMEOUT_SECONDS: ${EDT_UPSTREAM_TIMEOUT_SECONDS:-15}
-      # Webhook Discord où signaler les changements d'emploi du temps (facultatif).
-      EDT_DISCORD_WEBHOOK: ${EDT_DISCORD_WEBHOOK:-}
+      # Adresse publique du site : l'URL de retour OAuth en dépend.
+      EDT_PUBLIC_URL: ${EDT_PUBLIC_URL:-http://localhost:8080}
+      # Connexion Discord et messages privés (facultatif : tout ou rien).
+      EDT_DISCORD_CLIENT_ID: ${EDT_DISCORD_CLIENT_ID:-}
+      EDT_DISCORD_CLIENT_SECRET: ${EDT_DISCORD_CLIENT_SECRET:-}
+      EDT_DISCORD_BOT_TOKEN: ${EDT_DISCORD_BOT_TOKEN:-}
+      EDT_DISCORD_GUILD_ID: ${EDT_DISCORD_GUILD_ID:-}
+      EDT_SESSION_SECRET: ${EDT_SESSION_SECRET:-}
       EDT_LOG: ${EDT_LOG:-info}
     volumes:
       # Les PDF téléchargés survivent aux redémarrages : le service continue de
       # répondre même si le serveur du département est indisponible.
       - edt-cache:/app/cache
+      # Comptes et classes suivies : à sauvegarder.
+      - edt-state:/app/state
     expose:
       - "3000"
     # Décommenter pour joindre l'API directement, hors de nginx.
@@ -41,3 +49,4 @@ services:
 
 volumes:
   edt-cache:
+  edt-state:

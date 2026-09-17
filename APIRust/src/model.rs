@@ -107,6 +107,34 @@ pub struct Course {
     pub room: Option<String>,
 }
 
+impl Course {
+    /// Nature du créneau en toutes lettres minuscules, comme en JSON.
+    pub fn kind_code(&self) -> &'static str {
+        match self.kind {
+            CourseKind::Tp => "tp",
+            CourseKind::Sae => "sae",
+            CourseKind::Td => "td",
+            CourseKind::Amphi => "amphi",
+            CourseKind::Controle => "controle",
+        }
+    }
+
+    /// Un créneau de `G1` concerne aussi bien `G1a` que `G1b`, et
+    /// réciproquement : demander `G1a` rend les cours du groupe entier.
+    pub fn concerns(&self, wanted: &str) -> bool {
+        self.groups.iter().any(|group| matches_group(group, wanted))
+    }
+}
+
+fn matches_group(group: &str, wanted: &str) -> bool {
+    let (group, wanted) = (group.trim(), wanted.trim());
+    let common = group.len().min(wanted.len());
+    common > 0
+        && group.is_char_boundary(common)
+        && wanted.is_char_boundary(common)
+        && group[..common].eq_ignore_ascii_case(&wanted[..common])
+}
+
 /// L'en-tête du document : semaine couverte et date de génération.
 #[derive(Debug, Clone, Serialize)]
 pub struct Period {
@@ -152,6 +180,15 @@ mod tests {
     fn formats_clock_time() {
         assert_eq!(ClockTime::from_minutes(510).to_string(), "08:30");
         assert_eq!(ClockTime::rounded_to_5(779.4).to_string(), "13:00");
+    }
+
+    #[test]
+    fn group_filter_spans_half_groups() {
+        assert!(matches_group("G1", "G1a"));
+        assert!(matches_group("G1a", "G1"));
+        assert!(matches_group("G1a", "g1a"));
+        assert!(!matches_group("G1a", "G1b"));
+        assert!(!matches_group("G2", "G1"));
     }
 
     #[test]

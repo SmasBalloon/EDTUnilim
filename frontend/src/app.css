@@ -1531,3 +1531,144 @@ body {
 .room-planning__now--pinned {
   background: repeating-linear-gradient(to bottom, var(--color-accent) 0 4px, transparent 4px 7px);
 }
+
+/* --- Compte --------------------------------------------------------------- */
+
+/*
+ * Page d'un seul bloc : la zone qui défile remonte sous le bas du bandeau,
+ * pour que la première carte le chevauche comme sur les autres pages.
+ */
+.page {
+  flex: 1;
+  min-height: 0;
+  margin-top: calc(-1 * clamp(1.75rem, 5vw, 2.75rem));
+  overflow-y: auto;
+  position: relative;
+  z-index: 10;
+}
+
+.account {
+  display: grid;
+  gap: var(--space-gap);
+  width: 100%;
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: 0 var(--space-edge) 1.5rem;
+}
+
+.account__card {
+  display: grid;
+  gap: 0.875rem;
+  padding: 1rem;
+}
+
+.account__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.account__list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding-left: 1.125rem;
+  font-size: 0.875rem;
+}
+
+.account__profile {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.account__profile .setup__note {
+  margin: 0.125rem 0 0;
+}
+
+.account__avatar {
+  flex-shrink: 0;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.account__avatar--empty {
+  display: grid;
+  place-items: center;
+  background: var(--color-elevated);
+  color: var(--color-muted);
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.account__name {
+  margin: 0;
+  font-weight: 600;
+}
+
+.account__logout {
+  margin-left: auto;
+}
+
+.account__delete {
+  justify-self: center;
+  padding: 0.25rem 0.5rem;
+  border: 0;
+  background: none;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.account__delete:hover {
+  color: var(--color-accent);
+}
+
+.setup__link {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.button--primary {
+  border-color: transparent;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+
+.button--primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-accent) 88%, black);
+}
+
+/* Couleur de la marque Discord, reconnaissable d'un coup d'œil. */
+.button--discord {
+  justify-content: center;
+  border-color: transparent;
+  background: #5865f2;
+  color: #ffffff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button--discord:hover:not(:disabled) {
+  background: #4752c4;
+}
+
+.notice {
+  margin: 0;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-elevated);
+  font-size: 0.875rem;
+}
+
+.notice--error {
+  border-color: color-mix(in oklab, var(--color-accent) 50%, transparent);
+  background: color-mix(in oklab, var(--color-accent) 10%, var(--color-surface));
+}

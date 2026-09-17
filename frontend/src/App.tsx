@@ -1,11 +1,12 @@
 import { Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount } from 'solid-js';
-import { CalendarDays, ChevronLeft, ChevronRight, DoorOpen, Download, Settings } from 'lucide-solid';
+import { CalendarDays, ChevronLeft, ChevronRight, DoorOpen, Download, Settings, UserRound } from 'lucide-solid';
 
 import { ApiError, clearCache, fetchWeek, fetchYears, type Course } from './lib/api';
 import { groupBases, groupLabel, weekDays } from './lib/groups';
 import { downloadIcs } from './lib/ics';
 import { clock, greeting, humanDuration, periodLabel, resolveCurrentWeek } from './lib/time';
 import { settings, update } from './lib/settings';
+import { AccountPage } from './components/AccountPage';
 import { CourseModal } from './components/CourseModal';
 import { RoomsPage } from './components/RoomsPage';
 import { SettingsSheet } from './components/SettingsSheet';
@@ -13,17 +14,28 @@ import { Setup } from './components/Setup';
 import { StatusCard } from './components/StatusCard';
 import { WeekView } from './components/WeekView';
 
-type Page = 'timetable' | 'rooms';
+type Page = 'timetable' | 'rooms' | 'account';
 
-/** La page suit l'ancre de l'URL : `#salles` se partage et revient avec « Précédent ». */
+const HASHES: Record<Page, string> = { timetable: '', rooms: 'salles', account: 'compte' };
+
+/**
+ * La page suit l'ancre de l'URL : `#salles` se partage et revient avec
+ * « Précédent ». `#compte` peut porter un motif d'échec de connexion.
+ */
 function pageFromHash(): Page {
-  return location.hash === '#salles' ? 'rooms' : 'timetable';
+  if (location.hash === '#salles') return 'rooms';
+  return location.hash.startsWith('#compte') ? 'account' : 'timetable';
 }
+
+const TITLES: Record<Exclude<Page, 'timetable'>, [string, string]> = {
+  rooms: ['Salles', 'Libres ou occupées, maintenant ou à l’heure choisie.'],
+  account: ['Compte', 'Ta classe et tes messages privés sur Discord.'],
+};
 
 export function App() {
   const [page, setPage] = createSignal<Page>(pageFromHash());
   const goTo = (next: Page) => {
-    location.hash = next === 'rooms' ? 'salles' : '';
+    location.hash = HASHES[next];
   };
   const [years, { refetch: refetchYears }] = createResource(fetchYears);
   const [week, setWeek] = createSignal<number | null>(null);
@@ -155,7 +167,7 @@ export function App() {
     >
       {(loaded) => (
         <Show
-          when={page() === 'rooms' || (settings().year !== null && settings().group !== null)}
+          when={page() !== 'timetable' || (settings().year !== null && settings().group !== null)}
           fallback={<Setup years={loaded()} />}
         >
           <div class="app">
@@ -163,12 +175,12 @@ export function App() {
             <header class="banner">
               <div>
                 <h1 class="banner__greeting">
-                  {page() === 'rooms' ? 'Salles' : greeting(clock())}
+                  {page() === 'timetable' ? greeting(clock()) : TITLES[page() as 'rooms'][0]}
                 </h1>
                 <p class="banner__identity">
-                  {page() === 'rooms'
-                    ? 'Libres ou occupées, maintenant ou à l’heure choisie.'
-                    : `Vous êtes en ${groupLabel(settings().group ?? '')}.`}
+                  {page() === 'timetable'
+                    ? `Vous êtes en ${groupLabel(settings().group ?? '')}.`
+                    : TITLES[page() as 'rooms'][1]}
                 </p>
               </div>
 
@@ -230,6 +242,17 @@ export function App() {
                     <span class="button__label">Salles</span>
                   </button>
                 </Show>
+                <Show when={page() !== 'account'}>
+                  <button
+                    type="button"
+                    class="button button--on-accent"
+                    title="Compte Discord"
+                    aria-label="Compte Discord"
+                    onClick={() => goTo('account')}
+                  >
+                    <UserRound size={16} aria-hidden="true" />
+                  </button>
+                </Show>
                 <button
                   type="button"
                   class="button button--on-accent"
@@ -244,7 +267,13 @@ export function App() {
 
             <Show
               when={page() === 'timetable'}
-              fallback={<RoomsPage years={loaded()} onSelect={setSelected} />}
+              fallback={
+                page() === 'rooms' ? (
+                  <RoomsPage years={loaded()} onSelect={setSelected} />
+                ) : (
+                  <AccountPage years={loaded()} />
+                )
+              }
             >
               {/* Les deux cartes de tête chevauchent le bas du bandeau. */}
               <div class="summary">

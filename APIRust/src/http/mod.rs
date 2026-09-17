@@ -1,5 +1,6 @@
 //! Couche HTTP : routage et état partagé.
 
+mod account;
 mod meta;
 mod timetable;
 
@@ -10,7 +11,7 @@ use axum::extract::rejection::PathRejection;
 use axum::extract::{FromRequestParts, Path};
 use axum::http::request::Parts;
 use axum::http::StatusCode;
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use serde::de::DeserializeOwned;
 use tower_http::compression::CompressionLayer;
@@ -48,13 +49,17 @@ where
     }
 }
 
+pub use account::Account;
+
 pub struct AppState {
     pub store: Arc<Store>,
     pub upstream: String,
+    /// Connexion Discord ; absente, les routes du compte répondent `auth_disabled`.
+    pub account: Option<Arc<Account>>,
 }
 
-pub fn router(config: &Config, store: Arc<Store>) -> Router {
-    let state = Arc::new(AppState { store, upstream: config.upstream.clone() });
+pub fn router(config: &Config, store: Arc<Store>, account: Option<Arc<Account>>) -> Router {
+    let state = Arc::new(AppState { store, upstream: config.upstream.clone(), account });
 
     Router::new()
         .route("/", get(meta::index))
@@ -63,6 +68,10 @@ pub fn router(config: &Config, store: Arc<Store>) -> Router {
         .route("/api/v1/years", get(timetable::years))
         .route("/api/v1/years/{year}/weeks", get(timetable::weeks))
         .route("/api/v1/years/{year}/weeks/{week}", get(timetable::week))
+        .route("/api/v1/auth/login", get(account::login))
+        .route("/api/v1/auth/callback", get(account::callback))
+        .route("/api/v1/auth/logout", post(account::logout))
+        .route("/api/v1/me", get(account::me).put(account::update).delete(account::delete))
         .fallback(|| async { ApiError::UnknownRoute })
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())

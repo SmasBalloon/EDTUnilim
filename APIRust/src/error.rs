@@ -21,6 +21,12 @@ pub enum ApiError {
     BadRequest(String),
     #[error("cette route n'existe pas")]
     UnknownRoute,
+    #[error("connexion requise")]
+    Unauthenticated,
+    #[error("la connexion Discord n'est pas configurée sur ce serveur")]
+    AuthDisabled,
+    #[error("enregistrement impossible")]
+    Storage(#[from] std::io::Error),
 }
 
 #[derive(Serialize)]
@@ -32,7 +38,11 @@ struct ErrorBody {
 impl ApiError {
     fn status(&self) -> StatusCode {
         match self {
-            Self::UnknownWeek { .. } | Self::UnknownYear(_) | Self::UnknownRoute => StatusCode::NOT_FOUND,
+            Self::UnknownWeek { .. } | Self::UnknownYear(_) | Self::UnknownRoute | Self::AuthDisabled => {
+                StatusCode::NOT_FOUND
+            }
+            Self::Unauthenticated => StatusCode::UNAUTHORIZED,
+            Self::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::UpstreamUnavailable(_) | Self::UpstreamUnexpected => StatusCode::BAD_GATEWAY,
             Self::Unreadable(_) => StatusCode::UNPROCESSABLE_ENTITY,
@@ -48,6 +58,9 @@ impl ApiError {
             Self::UpstreamUnavailable(_) => "upstream_unavailable",
             Self::UpstreamUnexpected => "upstream_unexpected",
             Self::Unreadable(_) => "unreadable_timetable",
+            Self::Unauthenticated => "unauthenticated",
+            Self::AuthDisabled => "auth_disabled",
+            Self::Storage(_) => "storage",
         }
     }
 }

@@ -15,7 +15,7 @@ use tracing::{debug, info, warn};
 use crate::config::{Config, YEARS};
 use crate::error::ApiError;
 use crate::model::Timetable;
-use crate::notify::{self, Notifier};
+use crate::notify::Notifier;
 use crate::pdf;
 use crate::upstream::{self, Fetch, Upstream, Validators};
 
@@ -38,7 +38,7 @@ pub struct Store {
     timetables: RwLock<HashMap<(u8, u8), Arc<Entry>>>,
     /// Dernière revalidation forcée, par index d'année (`None`) ou semaine.
     revalidated: Mutex<HashMap<(u8, Option<u8>), Instant>>,
-    /// Sans webhook configuré, aucun changement n'est signalé.
+    /// Sans Discord configuré, aucun changement n'est signalé.
     notifier: Option<Notifier>,
 }
 
@@ -50,8 +50,28 @@ impl Store {
             weeks: RwLock::default(),
             timetables: RwLock::default(),
             revalidated: Mutex::default(),
-            notifier: config.discord_webhook.clone().map(Notifier::new).transpose()?,
+            notifier: None,
         })
+    }
+
+    /// Prévient les abonnés des semaines publiées et des changements.
+    pub fn with_notifier(mut self, notifier: Notifier) -> Self {
+        self.notifier = Some(notifier);
+        self
+    }
+
+    /// La semaine en cours, ou la prochaine publiée, parmi celles en cache.
+    pub async fn upcoming_week(&self, year: u8, today: time::Date) -> Option<Arc<Entry>> {
+        let weeks = self.weeks(year).await.ok()?;
+        let mut best: Option<Arc<Entry>> = None;
+        for &week in weeks.iter() {
+            let Ok(entry) = self.timetable(year, week).await else { continue };
+            let period = &entry.timetable.period;
+            if period.end >= today && best.as_ref().is_none_or(|b| period.end < b.timetable.period.end) {
+                best = Some(entry);
+            }
+        }
+        best
     }
 
     /// Semaines publiées pour une année.
@@ -176,7 +196,11 @@ impl Store {
                 continue;
             }
             match self.timetable(year, week).await {
-                Ok(entry) if published => self.notify(&[notify::new_week_message(&entry.timetable)]).await,
+                Ok(entry) if published => {
+                    if let Some(notifier) = &self.notifier {
+                        notifier.week_published(&entry.timetable).await;
+                    }
+                }
                 Ok(_) => {}
                 Err(error) => warn!(%error, year, week, "semaine publiée illisible"),
             }
@@ -188,12 +212,6 @@ impl Store {
     async fn load_from_disk(&self, year: u8, week: u8) -> bool {
         let Ok(bytes) = tokio::fs::read(self.disk_path(year, week)).await else { return false };
         self.store(year, week, upstream::Document { bytes, validators: Validators::default() }).is_ok()
-    }
-
-    async fn notify(&self, messages: &[String]) {
-        if let Some(notifier) = &self.notifier {
-            notifier.send(messages).await;
-        }
     }
 
     /// Relit une semaine déjà en cache ; sans effet si elle n'y est pas.
@@ -209,12 +227,9 @@ impl Store {
                 self.write_to_disk(year, week, &document.bytes).await;
                 match self.store(year, week, document) {
                     Ok(entry) => {
-                        let changes = notify::diff(&previous.timetable, &entry.timetable);
-                        if changes.is_empty() {
-                            debug!(year, week, "nouveau PDF, créneaux identiques");
-                        } else {
-                            info!(year, week, "emploi du temps mis à jour");
-                            self.notify(&notify::change_messages(&entry.timetable, &changes)).await;
+                        info!(year, week, "emploi du temps mis à jour");
+                        if let Some(notifier) = &self.notifier {
+                            notifier.week_changed(&previous.timetable, &entry.timetable).await;
                         }
                     }
                     Err(error) => warn!(%error, year, week, "nouvelle version illisible"),
