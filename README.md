@@ -9,7 +9,7 @@ PDF publiés par le département et servis en JSON, avec une interface web.
 | [`frontend/`](frontend) | l'interface SolidJS : semaine par colonnes de jours, en grille ou en liste |
 | [`api-edt-unilim/`](api-edt-unilim) | la version NestJS précédente |
 
-**Couverture des tests (API Rust) :** <!-- coverage:start -->![Couverture des tests](https://img.shields.io/badge/couverture_API-91.6%25-brightgreen)<!-- coverage:end -->
+**Couverture des tests (API Rust) :** <!-- coverage:start -->![Couverture des tests](https://img.shields.io/badge/couverture_API-91.3%25-brightgreen)<!-- coverage:end -->
 mesurée par `cargo llvm-cov`, mise à jour automatiquement à chaque push sur `master`.
 
 ## Tout lancer avec Docker
