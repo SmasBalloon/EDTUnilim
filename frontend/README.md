@@ -50,6 +50,13 @@ VITE_API_URL=https://edt.exemple.fr npm run build
   jour au-dessus fait la même chose, en un toucher.
 - **Navigation** par semaine (flèches, `←` / `→` au clavier), bouton
   *Aujourd'hui*, semaine courante déduite des périodes publiées.
+- **Comparer** (`#comparer`) : deux classes côte à côte, colonne contre
+  colonne, sur la même échelle horaire. Chaque côté se choisit librement — son
+  année et son groupe —, donc un BUT 1 se compare à un BUT 2 ; chacun est lu
+  séparément, une semaine non publiée d'un côté ne prive pas de l'autre. Les
+  cours que les deux suivent ensemble (même créneau, même ressource) sont
+  cerclés, et les moments où personne n'a cours traversent les deux colonnes :
+  c'est la réponse à « quand est-ce qu'on est libres tous les deux ? ».
 - **Bandeau** du cours en cours ou du prochain cours, calculé sur la semaine
   courante même quand on consulte une autre semaine.
 - **Détail** : une case cliquée ouvre une feuille (intitulé complet,
@@ -78,7 +85,11 @@ VITE_API_URL=https://edt.exemple.fr npm run build
 | `src/lib/motion.ts` | ressorts, projection de l'élan, résistance aux bords |
 | `src/lib/media.ts` | requêtes média lues comme des signaux |
 | `src/components/WeekView.tsx` | la semaine, en grille ou en liste, feuilletée au doigt |
+| `src/components/Pager.tsx` | les pages côte à côte que le doigt fait défiler |
 | `src/components/Sheet.tsx` | le plateau des boîtes de dialogue, tirable |
+| `src/components/WeekBar.tsx` | la semaine affichée, et de quoi en changer |
+| `src/components/ComparePage.tsx` | le choix des deux classes à comparer |
+| `src/components/CompareGrid.tsx` | les deux emplois du temps, colonne contre colonne |
 | `src/components/CourseBlock.tsx` | une case de cours, repliée ou agrandie |
 | `src/app.css` | toute la feuille de style : jetons, thèmes, base, mise en page, composants |
 | `public/sw.js` | service worker (coquille + données hors ligne) |
@@ -103,4 +114,6 @@ rend les matières opaques et `prefers-contrast` durcit les bords.
 
 Deux requêtes par semaine affichée : la semaine filtrée sur le groupe
 (`?group=G1a`, ce qui est affiché) et la semaine complète, qui fournit les jours
-occupés et la liste des groupes du sélecteur.
+occupés et la liste des groupes du sélecteur. La comparaison en fait donc
+quatre, deux par classe — toutes mémorisées, donc revenir sur une semaine déjà
+lue ne coûte rien.

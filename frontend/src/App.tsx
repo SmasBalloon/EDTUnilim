@@ -1,22 +1,29 @@
 import { Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount } from 'solid-js';
-import { CalendarDays, ChevronLeft, ChevronRight, DoorOpen, Download, Settings, UserRound } from 'lucide-solid';
+import { CalendarDays, Columns2, DoorOpen, Download, Settings, UserRound } from 'lucide-solid';
 
 import { ApiError, clearCache, fetchWeek, fetchYears, type Course } from './lib/api';
 import { groupBases, groupLabel, weekDays } from './lib/groups';
 import { downloadIcs } from './lib/ics';
-import { clock, greeting, humanDuration, periodLabel, resolveCurrentWeek } from './lib/time';
+import { clock, greeting, periodLabel, resolveCurrentWeek } from './lib/time';
 import { settings, update } from './lib/settings';
 import { AccountPage } from './components/AccountPage';
+import { ComparePage } from './components/ComparePage';
 import { CourseModal } from './components/CourseModal';
 import { RoomsPage } from './components/RoomsPage';
 import { SettingsSheet } from './components/SettingsSheet';
 import { Setup } from './components/Setup';
 import { StatusCard } from './components/StatusCard';
+import { WeekBar } from './components/WeekBar';
 import { WeekView } from './components/WeekView';
 
-type Page = 'timetable' | 'rooms' | 'account';
+type Page = 'timetable' | 'compare' | 'rooms' | 'account';
 
-const HASHES: Record<Page, string> = { timetable: '', rooms: 'salles', account: 'compte' };
+const HASHES: Record<Page, string> = {
+  timetable: '',
+  compare: 'comparer',
+  rooms: 'salles',
+  account: 'compte',
+};
 
 /**
  * La page suit l'ancre de l'URL : `#salles` se partage et revient avec
@@ -24,10 +31,12 @@ const HASHES: Record<Page, string> = { timetable: '', rooms: 'salles', account: 
  */
 function pageFromHash(): Page {
   if (location.hash === '#salles') return 'rooms';
+  if (location.hash === '#comparer') return 'compare';
   return location.hash.startsWith('#compte') ? 'account' : 'timetable';
 }
 
 const TITLES: Record<Exclude<Page, 'timetable'>, [string, string]> = {
+  compare: ['Comparer', 'Deux classes côte à côte, heure par heure.'],
   rooms: ['Salles', 'Libres ou occupées, maintenant ou à l’heure choisie.'],
   account: ['Compte', 'Ta classe et tes messages privés sur Discord.'],
 };
@@ -109,6 +118,12 @@ export function App() {
     return loaded ? groupBases(loaded.structure) : [];
   });
 
+  /** `14 – 19 sept.` pour la semaine affichée. */
+  const period = createMemo(() => {
+    const loaded = data();
+    return loaded ? periodLabel(loaded.filtered) : undefined;
+  });
+
   /** Volume horaire de la semaine affichée. */
   const workload = createMemo(() => {
     const loaded = data();
@@ -141,7 +156,9 @@ export function App() {
         setSelected(null);
         setShowSettings(false);
       }
-      if (page() !== 'timetable') return;
+      // Les flèches changent de semaine, sur l'emploi du temps comme sur la
+      // comparaison : les deux pages en affichent une.
+      if (page() !== 'timetable' && page() !== 'compare') return;
       if (event.key === 'ArrowLeft') step(-1);
       if (event.key === 'ArrowRight') step(1);
     };
@@ -173,7 +190,7 @@ export function App() {
           <div class="app">
             {/* Bandeau : qui on est, et les actions de l'application. */}
             <header class="banner">
-              <div>
+              <div class="banner__who">
                 <h1 class="banner__greeting">
                   {page() === 'timetable' ? greeting(clock()) : TITLES[page() as 'rooms'][0]}
                 </h1>
@@ -200,22 +217,26 @@ export function App() {
                     </button>
                   }
                 >
-                  <button
-                    type="button"
-                    class="button button--on-accent"
-                    aria-pressed={settings().view === 'grid'}
-                    onClick={() => update({ view: 'grid' })}
-                  >
-                    Grille
-                  </button>
-                  <button
-                    type="button"
-                    class="button button--on-accent"
-                    aria-pressed={settings().view === 'list'}
-                    onClick={() => update({ view: 'list' })}
-                  >
-                    Liste
-                  </button>
+                  {/* Sur téléphone, le choix de l'affichage vit dans les
+                      réglages : le bandeau garde ce qui change de page. */}
+                  <div class="banner__views">
+                    <button
+                      type="button"
+                      class="button button--on-accent"
+                      aria-pressed={settings().view === 'grid'}
+                      onClick={() => update({ view: 'grid' })}
+                    >
+                      Grille
+                    </button>
+                    <button
+                      type="button"
+                      class="button button--on-accent"
+                      aria-pressed={settings().view === 'list'}
+                      onClick={() => update({ view: 'list' })}
+                    >
+                      Liste
+                    </button>
+                  </div>
                   <button
                     type="button"
                     class="button button--on-accent"
@@ -229,7 +250,17 @@ export function App() {
                     }}
                   >
                     <Download size={16} aria-hidden="true" />
-                    .ics
+                    <span class="button__label">.ics</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="button button--on-accent"
+                    title="Comparer deux classes"
+                    aria-label="Comparer deux classes"
+                    onClick={() => goTo('compare')}
+                  >
+                    <Columns2 size={16} aria-hidden="true" />
+                    <span class="button__label">Comparer</span>
                   </button>
                   <button
                     type="button"
@@ -270,6 +301,17 @@ export function App() {
               fallback={
                 page() === 'rooms' ? (
                   <RoomsPage years={loaded()} onSelect={setSelected} />
+                ) : page() === 'compare' ? (
+                  <ComparePage
+                    years={loaded()}
+                    week={week()}
+                    current={currentWeek()}
+                    onWeek={(next) => {
+                      setWeek(next);
+                      setSelected(null);
+                    }}
+                    onSelect={setSelected}
+                  />
                 ) : (
                   <AccountPage years={loaded()} />
                 )
@@ -281,52 +323,17 @@ export function App() {
                   {(current) => <StatusCard courses={current().courses} />}
                 </Show>
 
-                <div class="card week-summary">
-                  <div class="week-summary__info">
-                    <span class="week-summary__number">{`Semaine ${week() ?? '—'}`}</span>
-                    <Show when={data()}>
-                      {(loadedWeek) => (
-                        <span class="week-summary__period">{periodLabel(loadedWeek().filtered)}</span>
-                      )}
-                    </Show>
-                    <Show when={workload() > 0}>
-                      <span class="week-summary__workload">{humanDuration(workload())}</span>
-                    </Show>
-                  </div>
-
-                  <div class="week-summary__nav">
-                    <Show when={currentWeek() !== undefined && week() !== currentWeek()}>
-                      <button
-                        type="button"
-                        class="button"
-                        onClick={() => {
-                          setWeek(currentWeek() ?? null);
-                          setSelected(null);
-                        }}
-                      >
-                        Aujourd'hui
-                      </button>
-                    </Show>
-                    <button
-                      type="button"
-                      class="button button--round"
-                      onClick={() => step(-1)}
-                      disabled={weeks().indexOf(week() ?? -1) <= 0}
-                      aria-label="Semaine précédente"
-                    >
-                      <ChevronLeft size={18} aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      class="button button--round"
-                      onClick={() => step(1)}
-                      disabled={weeks().indexOf(week() ?? -1) >= weeks().length - 1}
-                      aria-label="Semaine suivante"
-                    >
-                      <ChevronRight size={18} aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
+                <WeekBar
+                  week={week()}
+                  weeks={weeks()}
+                  current={currentWeek()}
+                  period={period()}
+                  workload={workload()}
+                  onWeek={(next) => {
+                    setWeek(next);
+                    setSelected(null);
+                  }}
+                />
               </div>
 
               <main class="app__timetable">

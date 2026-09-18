@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal, onCleanup, type Component, type JSX } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, onMount, type Component, type JSX } from 'solid-js';
 
 import { useBottomSheet } from '../lib/media';
 import { Spring, Velocity, project, rubberband } from '../lib/motion';
@@ -87,6 +87,21 @@ export const Sheet: Component<Props> = (props) => {
     } else if (visible()) {
       retract(() => setVisible(false));
     }
+  });
+
+  // Échap range la feuille, d'où qu'elle vienne : c'est la sortie qu'on
+  // cherche en premier quand une boîte s'ouvre par erreur.
+  onMount(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && props.open) {
+        retract(() => {
+          setVisible(false);
+          props.onClose();
+        });
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    onCleanup(() => window.removeEventListener('keydown', onKey));
   });
 
   // --- Geste : la feuille suit le doigt, au pixel près ---------------------

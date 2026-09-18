@@ -9,6 +9,8 @@ interface Props {
   live: boolean;
   /** Créneau trop court pour afficher l'intitulé. */
   dense: boolean;
+  /** En comparaison : les deux classes suivent ce cours ensemble. */
+  together?: boolean;
   /** Position et hauteur, calculées par la grille. */
   style: Record<string, string>;
   onSelect: () => void;
@@ -19,8 +21,9 @@ export const CourseBlock: Component<Props> = (props) => (
   <button
     type="button"
     class={`course-block kind-${props.course.kind}`}
-    classList={{ 'course-block--live': props.live }}
+    classList={{ 'course-block--live': props.live, 'course-block--together': props.together }}
     style={props.style}
+    title={props.together ? 'Les deux classes y sont ensemble' : undefined}
     onClick={props.onSelect}
   >
     <span class="course-block__head">

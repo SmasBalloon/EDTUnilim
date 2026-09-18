@@ -148,6 +148,19 @@ export function relativeDayLabel(iso: string, now: Date = new Date()): string {
   return prefix ? `${prefix} : ${capitalised} ${stamp}` : `${capitalised} ${stamp}`;
 }
 
+/**
+ * Le rang du jour ouvert dans une semaine : celui qu'on a choisi, sinon
+ * aujourd'hui, sinon le premier jour. Un jour choisi dans une autre semaine
+ * n'est plus dans la liste : on retombe alors sur aujourd'hui.
+ */
+export function dayIndex(days: { date: string }[], chosen: string | null): number {
+  for (const date of [chosen, todayIso(clock())]) {
+    const found = days.findIndex((day) => day.date === date);
+    if (found !== -1) return found;
+  }
+  return 0;
+}
+
 /** Le salut qui convient à l'heure qu'il est. */
 export function greeting(now: Date = new Date()): string {
   const hour = now.getHours();
