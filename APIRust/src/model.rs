@@ -229,9 +229,9 @@ pub mod opt_iso_date {
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Date>, D::Error> {
         let text = Option::<String>::deserialize(deserializer)?;
         match text {
-            Some(text) => Date::parse(&text, &super::iso_date::FORMAT)
-                .map(Some)
-                .map_err(serde::de::Error::custom),
+            Some(text) => {
+                Date::parse(&text, &super::iso_date::FORMAT).map(Some).map_err(serde::de::Error::custom)
+            }
             None => Ok(None),
         }
     }

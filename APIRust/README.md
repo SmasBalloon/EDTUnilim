@@ -162,12 +162,30 @@ mois s'effacent d'eux-mêmes.
 
 ### Le bot
 
-Avec `EDT_DISCORD_PUBLIC_KEY`, le bot répond aussi aux commandes. Discord
-n'ouvre pas de connexion permanente : il appelle
-`POST /api/v1/discord/interactions`, signé, et la réponse part dans le même
-échange. Il faut donc déclarer cette adresse dans le portail Discord
-(« Interactions Endpoint URL ») ; Discord la vérifie en la sondant, y compris
-avec de fausses signatures, que la route refuse par un `401`.
+Le bot n'est pas un programme à part : **c'est ce service**. Il n'ouvre aucune
+connexion permanente vers Discord, donc il apparaît *hors ligne* dans la liste
+des membres — c'est normal, et ça ne l'empêche ni d'écrire ni de répondre. Il
+appelle Discord en HTTP pour les messages privés ; et pour les commandes, c'est
+Discord qui l'appelle, sur `POST /api/v1/discord/interactions`.
+
+Quatre conditions, donc, pour voir les commandes apparaître :
+
+1. `EDT_DISCORD_PUBLIC_KEY` renseignée — sans elle, les commandes ne sont même
+   pas déclarées : une commande visible dont la réponse ne peut être ni reçue
+   ni vérifiée vaut moins que pas de commande du tout. Le démarrage le dit.
+2. L'« Interactions Endpoint URL » déclarée dans le portail Discord :
+   `EDT_PUBLIC_URL` + `/api/v1/discord/interactions`. Discord la vérifie en la
+   sondant, y compris avec de fausses signatures, que la route refuse par `401`.
+3. Cette adresse **joignable depuis l'extérieur** : c'est Discord qui appelle.
+   `http://localhost:8080` ne peut pas marcher — il faut un nom de domaine, ou
+   un tunnel pour essayer.
+4. L'application autorisée avec le champ `applications.commands`, en plus de
+   `bot`, sur le serveur où on veut les taper.
+
+Les commandes sont déclarées **globalement**, et non sur le serveur d'accueil :
+c'est la seule façon qu'elles existent aussi dans le message privé du bot, là
+où arrivent déjà les notifications. Discord met quelques minutes à les
+propager la première fois.
 
 | Commande | Effet |
 | --- | --- |
@@ -175,7 +193,33 @@ avec de fausses signatures, que la route refuse par un `401`.
 | `/devoir ajouter intitule:… [matiere] [pour] [portee] [details]` | note un devoir |
 
 Les réponses sont éphémères : elles ne s'affichent que pour la personne qui a
-tapé la commande. Les commandes se redéclarent à chaque démarrage du service.
+tapé la commande. Les commandes se redéclarent à chaque démarrage du service,
+si bien que le bot ne reste jamais avec une commande d'une version passée.
+
+### La présence
+
+Le bot apparaît **en ligne**, « Regarde les emplois du temps · 3 devoirs », et
+le texte se rafraîchit toutes les dix minutes. C'est la seule chose qui demande
+une connexion permanente : une présence ne s'envoie pas par une requête, Discord
+ne la lit que sur la passerelle (`src/presence.rs`, d'où `tokio-tungstenite`).
+
+Le bot n'y demande **aucune intention** (`intents: 0`) : il ne reçoit ni
+messages ni événements de serveur, il se montre, c'est tout. La connexion se
+rétablit seule après une coupure, en patientant de plus en plus longtemps ; un
+refus d'authentification, lui, est dit une fois et la boucle s'arrête — ça ne
+s'arrange pas en réessayant.
+
+### Quand ça ne marche pas
+
+Les journaux (`docker compose logs api`) nomment la cause :
+
+| Message | Ce qu'il faut faire |
+| --- | --- |
+| `présence Discord impossible : le jeton du bot est refusé` (code 4004) | le jeton de `EDT_DISCORD_BOT_TOKEN` n'est plus valide : *Bot* → *Reset Token* dans le portail, puis recopier. Les messages privés sont hors service eux aussi. |
+| `commandes Discord refusées … 401` | même cause : le jeton. |
+| `commandes Discord refusées … 403 Missing Access` | l'application n'a pas le champ `applications.commands` : réinviter le bot avec `scope=bot%20applications.commands`. |
+| `commandes slash éteintes : EDT_DISCORD_PUBLIC_KEY est absente` | renseigner la clé publique de l'application. |
+| rien du tout au démarrage | la configuration Discord est incomplète : c'est tout ou rien (voir plus bas). |
 
 Les messages privés suivent la vie d'un devoir : proposition à confirmer (avec
 le bouton qui va bien), confirmation, puis rappel la veille du rendu de ce qui

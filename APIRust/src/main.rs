@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use tokio::net::TcpListener;
 use tokio::signal;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use edt_unilim_api::config::Config;
@@ -13,6 +13,7 @@ use edt_unilim_api::discord::Discord;
 use edt_unilim_api::homework::HomeworkStore;
 use edt_unilim_api::http::{self, Account};
 use edt_unilim_api::notify::Notifier;
+use edt_unilim_api::presence;
 use edt_unilim_api::session::Signer;
 use edt_unilim_api::store::Store;
 use edt_unilim_api::users::UserStore;
@@ -32,11 +33,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let discord = Discord::new(discord_config.clone())?;
         let notifier = Notifier::new(discord.clone(), Arc::clone(&users));
         store = store.with_notifier(notifier.clone());
-        tokio::spawn(reminder_loop(
-            Arc::clone(&homework),
-            Arc::clone(&users),
-            notifier.clone(),
-        ));
+        tokio::spawn(reminder_loop(Arc::clone(&homework), Arc::clone(&users), notifier.clone()));
+        // La seule connexion permanente du service : sans elle, le bot est là
+        // mais paraît hors ligne.
+        tokio::spawn(presence::keep_online(discord_config.clone(), Arc::clone(&homework)));
         account = Some(Arc::new(Account {
             discord,
             users,
@@ -50,15 +50,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Les commandes se redéclarent à chaque démarrage : c'est peu coûteux,
         // et le bot ne reste jamais avec une commande d'une version passée.
-        if let Some(account) = &account {
-            let discord = account.discord.clone();
-            let url = format!("{}/api/v1/discord/interactions", config.public_url);
-            tokio::spawn(async move {
-                match discord.register_commands(&http::commands()).await {
-                    Ok(()) => info!(interactions = %url, "commandes Discord déclarées"),
-                    Err(error) => error!(%error, "commandes Discord non déclarées"),
-                }
-            });
+        //
+        // Sans clé publique, on ne les déclare pas : une commande qui apparaît
+        // dans Discord mais dont la réponse ne peut être ni reçue ni vérifiée
+        // est pire que pas de commande du tout.
+        let url = format!("{}/api/v1/discord/interactions", config.public_url);
+        match (&account, discord_config.public_key.is_some()) {
+            (Some(account), true) => {
+                let discord = account.discord.clone();
+                let endpoint = url.clone();
+                tokio::spawn(async move {
+                    match discord.register_commands(&http::commands()).await {
+                        Ok(()) => info!(
+                            endpoint = %endpoint,
+                            "commandes Discord déclarées — à déclarer aussi comme « Interactions Endpoint URL » dans le portail ; Discord met quelques minutes à les propager"
+                        ),
+                        Err(error) => error!(%error, "commandes Discord refusées"),
+                    }
+                });
+            }
+            _ => warn!(
+                "commandes slash éteintes : EDT_DISCORD_PUBLIC_KEY est absente (les messages privés, eux, fonctionnent)"
+            ),
         }
     }
     let store = Arc::new(store);

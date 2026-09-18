@@ -83,12 +83,14 @@ impl ButtonStyle {
 fn action_row(buttons: &[Button]) -> Vec<serde_json::Value> {
     buttons
         .iter()
-        .map(|button| json!({
-            "type": 2,
-            "style": button.style.code(),
-            "label": button.label,
-            "custom_id": button.id,
-        }))
+        .map(|button| {
+            json!({
+                "type": 2,
+                "style": button.style.code(),
+                "label": button.label,
+                "custom_id": button.id,
+            })
+        })
         .collect()
 }
 
@@ -247,15 +249,14 @@ impl Discord {
         self.config.public_key.as_deref()
     }
 
-    /// Déclare les commandes slash du bot sur le serveur configuré.
+    /// Déclare les commandes slash de l'application.
     ///
-    /// Un serveur les reçoit sur-le-champ, là où les commandes globales mettent
-    /// jusqu'à une heure à se propager.
+    /// Elles sont *globales*, et non liées au serveur d'accueil : c'est la
+    /// seule façon qu'elles existent aussi dans le message privé du bot — or
+    /// c'est là que tout se passe ici, les notifications y arrivent déjà.
+    /// Contrepartie : Discord met quelques minutes à les propager.
     pub async fn register_commands(&self, commands: &serde_json::Value) -> Result<(), DiscordError> {
-        let url = format!(
-            "{}/applications/{}/guilds/{}/commands",
-            self.config.api_base, self.config.client_id, self.config.guild_id
-        );
+        let url = format!("{}/applications/{}/commands", self.config.api_base, self.config.client_id);
         let request = self
             .bot(self.client.put(url))
             .header(CONTENT_TYPE, "application/json")

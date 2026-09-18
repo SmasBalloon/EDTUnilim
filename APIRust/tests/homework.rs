@@ -148,11 +148,7 @@ async fn a_class_homework_needs_someone_else_to_confirm_it() {
     assert_eq!(confirmed["confirmed_name"], "Bob");
 
     // Deux fois, non.
-    setup
-        .bob
-        .post(&format!("/api/v1/homework/{id}/confirm"))
-        .await
-        .assert_status(StatusCode::FORBIDDEN);
+    setup.bob.post(&format!("/api/v1/homework/{id}/confirm")).await.assert_status(StatusCode::FORBIDDEN);
 
     // « Fait » ne vaut que pour soi.
     let done: Value =
@@ -228,12 +224,7 @@ async fn discord_interactions_must_be_signed() {
     refused.assert_status(StatusCode::UNAUTHORIZED);
 
     // Sans signature du tout non plus.
-    setup
-        .ada
-        .post("/api/v1/discord/interactions")
-        .json(&ping)
-        .await
-        .assert_status(StatusCode::UNAUTHORIZED);
+    setup.ada.post("/api/v1/discord/interactions").json(&ping).await.assert_status(StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

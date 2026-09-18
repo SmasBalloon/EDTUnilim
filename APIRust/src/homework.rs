@@ -239,11 +239,7 @@ impl HomeworkStore {
     }
 
     /// Applique une modification, si le devoir existe.
-    pub async fn update(
-        &self,
-        id: &str,
-        change: impl FnOnce(&mut Homework),
-    ) -> io::Result<Option<Homework>> {
+    pub async fn update(&self, id: &str, change: impl FnOnce(&mut Homework)) -> io::Result<Option<Homework>> {
         let mut items = self.items.write().await;
         let Some(item) = items.get_mut(id) else { return Ok(None) };
         change(item);
@@ -363,10 +359,8 @@ mod tests {
         let ada = user("1", 1, "G1a");
         let bob = user("2", 1, "G1b");
 
-        let item = store
-            .create(&ada, new(Audience::Class { group: Some("G1".into()) }))
-            .await
-            .expect("devoir noté");
+        let item =
+            store.create(&ada, new(Audience::Class { group: Some("G1".into()) })).await.expect("devoir noté");
 
         // Il est lisible par la classe, mais marqué en attente, et son auteur
         // ne peut pas se confirmer lui-même.
@@ -431,10 +425,7 @@ mod tests {
         let ada = user("1", 1, "G1a");
         let item = store.create(&ada, new(Audience::Personal)).await.expect("devoir noté");
 
-        let edit = Edit {
-            audience: Some(Audience::Class { group: Some("G1".into()) }),
-            ..Edit::default()
-        };
+        let edit = Edit { audience: Some(Audience::Class { group: Some("G1".into()) }), ..Edit::default() };
         let opened = store
             .update(&item.id, |item| apply(item, edit))
             .await

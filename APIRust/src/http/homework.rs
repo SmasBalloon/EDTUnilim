@@ -72,7 +72,10 @@ pub struct DoneBody {
 }
 
 /// Les devoirs que cette personne voit.
-pub async fn list(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Result<Json<Vec<View>>, ApiError> {
+pub async fn list(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<View>>, ApiError> {
     let account = state.account()?;
     let user = account.user_from(&headers).await?;
     let items = account.homework.visible_to(&user).await;
@@ -136,11 +139,8 @@ pub async fn edit(
         course: Some(body.course),
         audience: Some(check_audience(body.audience, &user)?),
     };
-    let updated = account
-        .homework
-        .update(&id, |item| apply(item, edit))
-        .await?
-        .ok_or(ApiError::UnknownRoute)?;
+    let updated =
+        account.homework.update(&id, |item| apply(item, edit)).await?.ok_or(ApiError::UnknownRoute)?;
 
     // Devenu un devoir de classe, il repart en attente de confirmation.
     if updated.is_pending() && !item.is_pending() {
@@ -175,9 +175,7 @@ pub async fn confirm(
     let user = account.user_from(&headers).await?;
     let item = account.homework.get(&id).await.ok_or(ApiError::UnknownRoute)?;
     if !item.confirmable_by(&user) {
-        return Err(ApiError::Forbidden(
-            "ce devoir est déjà confirmé, ou c'est toi qui l'as noté",
-        ));
+        return Err(ApiError::Forbidden("ce devoir est déjà confirmé, ou c'est toi qui l'as noté"));
     }
 
     let confirmed = account

@@ -63,10 +63,7 @@ struct DiscordUser {
 
 impl Interaction {
     fn author(&self) -> Option<&str> {
-        self.user
-            .as_ref()
-            .or(self.member.as_ref().map(|member| &member.user))
-            .map(|user| user.id.as_str())
+        self.user.as_ref().or(self.member.as_ref().map(|member| &member.user)).map(|user| user.id.as_str())
     }
 }
 
@@ -76,6 +73,8 @@ pub fn commands() -> Value {
         {
             "name": "devoirs",
             "description": "Ce qu'il y a à faire",
+            // Dans un serveur, dans le message privé du bot, et dans un groupe.
+            "contexts": [0, 1, 2],
             "options": [
                 {
                     "type": 3,
@@ -99,6 +98,7 @@ pub fn commands() -> Value {
         {
             "name": "devoir",
             "description": "Noter un devoir",
+            "contexts": [0, 1, 2],
             "options": [{
                 "type": 1,
                 "name": "ajouter",
@@ -158,12 +158,10 @@ pub async fn handle(
 /// La signature d'une requête Discord : l'horodatage suivi du corps, le tout
 /// signé avec la clé de l'application.
 fn verified(public_key: &str, headers: &HeaderMap, body: &[u8]) -> bool {
-    let Some(signature) = headers.get("X-Signature-Ed25519").and_then(|value| value.to_str().ok())
-    else {
+    let Some(signature) = headers.get("X-Signature-Ed25519").and_then(|value| value.to_str().ok()) else {
         return false;
     };
-    let Some(timestamp) = headers.get("X-Signature-Timestamp").and_then(|value| value.to_str().ok())
-    else {
+    let Some(timestamp) = headers.get("X-Signature-Timestamp").and_then(|value| value.to_str().ok()) else {
         return false;
     };
     let (Some(key), Some(signature)) = (from_hex::<32>(public_key), from_hex::<64>(signature)) else {
@@ -258,12 +256,14 @@ async fn list_command(state: &Arc<AppState>, user: &User, data: &Value) -> Value
         .iter()
         .filter(|item| !item.is_done_by(&user.id) && !item.is_pending())
         .take(BUTTONS)
-        .map(|item| json!({
-            "type": 2,
-            "style": 1,
-            "label": trim_label(&item.summary()),
-            "custom_id": format!("hw:done:{}", item.id),
-        }))
+        .map(|item| {
+            json!({
+                "type": 2,
+                "style": 1,
+                "label": trim_label(&item.summary()),
+                "custom_id": format!("hw:done:{}", item.id),
+            })
+        })
         .collect();
 
     with_buttons(&text, buttons)
@@ -348,8 +348,7 @@ async fn button(state: &Arc<AppState>, interaction: &Interaction) -> Value {
     let Ok(account) = state.account() else { return reply("Les comptes sont éteints ici.") };
 
     let mut parts = id.split(':');
-    let (Some("hw"), Some(action), Some(homework_id)) = (parts.next(), parts.next(), parts.next())
-    else {
+    let (Some("hw"), Some(action), Some(homework_id)) = (parts.next(), parts.next(), parts.next()) else {
         return reply("Bouton inconnu.");
     };
     let Some(item) = account.homework.get(homework_id).await else {
