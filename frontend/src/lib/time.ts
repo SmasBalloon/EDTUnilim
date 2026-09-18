@@ -80,6 +80,22 @@ function nearest(weeks: number[], target: number): number {
   );
 }
 
+const DAY_MS = 24 * 3600 * 1000;
+
+/**
+ * Combien de semaines séparent la période lue du jour visé.
+ *
+ * L'écart se compte en jours entiers — un changement d'heure ne décale que
+ * d'une heure — puis se divise par sept vers le bas : vendredi est le
+ * cinquième jour de sa semaine, pas le début de la suivante. Seul le dimanche,
+ * qui suit le dernier jour publié sans sortir de la tranche de sept jours,
+ * demande la semaine d'après.
+ */
+function weekOffset(day: number, start: number, end: number): number {
+  const offset = Math.floor(Math.round((day - start) / DAY_MS) / 7);
+  return offset === 0 && day > end ? 1 : offset;
+}
+
 /**
  * Trouve la semaine qui contient un jour donné, aujourd'hui par défaut.
  *
@@ -106,8 +122,7 @@ export async function resolveCurrentWeek(
     const end = parseDate(week.period.end).getTime();
     if (today >= start && today <= end) return candidate;
 
-    const offset = Math.round((today - start) / (7 * 24 * 3600 * 1000));
-    const next = nearest(weeks, candidate + offset);
+    const next = nearest(weeks, candidate + weekOffset(today, start, end));
     if (next === candidate) return candidate;
     candidate = next;
   }

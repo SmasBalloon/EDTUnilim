@@ -44,15 +44,17 @@ VITE_API_URL=https://edt.exemple.fr npm run build
   - *grille horaire* — échelle 8 h – 19 h 30, blocs proportionnels à la durée,
     couloirs quand deux créneaux se chevauchent, repère de l'heure courante ;
   - *liste par jour* — les cours à la suite, horaires écrits sur chaque carte.
-- **Mobile** : les colonnes de la semaine restent toutes affichées, avec
-  défilement horizontal ; l'en-tête des jours et la colonne des heures sont
-  figées.
+- **Mobile** : la semaine se feuillette, un jour par page. La page suit le
+  doigt au pixel près, résiste aux deux bouts de la semaine et part vers le
+  jour que le geste visait, à la vitesse où il a été lâché. Le sélecteur de
+  jour au-dessus fait la même chose, en un toucher.
 - **Navigation** par semaine (flèches, `←` / `→` au clavier), bouton
   *Aujourd'hui*, semaine courante déduite des périodes publiées.
 - **Bandeau** du cours en cours ou du prochain cours, calculé sur la semaine
   courante même quand on consulte une autre semaine.
-- **Détail** : une case cliquée s'agrandit sur place (intitulé complet,
-  enseignant, salle, groupes, durée, type).
+- **Détail** : une case cliquée ouvre une feuille (intitulé complet,
+  enseignant, salle, groupes, durée, type). Au doigt elle monte du bas et se
+  renvoie d'un geste vers le bas ; à la souris elle se pose au centre.
 - **Export .ics** de la semaine affichée, et **PWA installable** qui garde les
   dernières semaines consultées hors connexion.
 - Habillage sombre à accent rouge, dans l'esprit de
@@ -73,7 +75,10 @@ VITE_API_URL=https://edt.exemple.fr npm run build
 | `src/lib/layout.ts` | amplitude de la grille, placement en couloirs |
 | `src/lib/ics.ts` | export iCalendar |
 | `src/lib/settings.ts` | réglages persistés et thème |
-| `src/components/WeekView.tsx` | la semaine, en grille ou en liste |
+| `src/lib/motion.ts` | ressorts, projection de l'élan, résistance aux bords |
+| `src/lib/media.ts` | requêtes média lues comme des signaux |
+| `src/components/WeekView.tsx` | la semaine, en grille ou en liste, feuilletée au doigt |
+| `src/components/Sheet.tsx` | le plateau des boîtes de dialogue, tirable |
 | `src/components/CourseBlock.tsx` | une case de cours, repliée ou agrandie |
 | `src/app.css` | toute la feuille de style : jetons, thèmes, base, mise en page, composants |
 | `public/sw.js` | service worker (coquille + données hors ligne) |
@@ -86,6 +91,15 @@ jeu de jetons réécrits —, base, mise en page, puis un bloc par composant. Le
 composants ne portent que des classes sémantiques (`day-card`, `course-row`,
 `badge badge--kind`) : aucune valeur arbitraire dans le balisage, aucune couleur
 écrite ailleurs que dans les jetons.
+
+Le mouvement ne passe pas par des animations CSS dès qu'un doigt peut s'en
+saisir : un `@keyframes` a une durée écrite d'avance et ne se rattrape pas en
+pleine course. Ce qui se touche est mené par les ressorts de `src/lib/motion.ts`,
+qui repartent toujours de la position affichée et reprennent la vitesse du
+geste. Restent en CSS les changements d'état — l'appui, le survol, la sélection
+—, donnés au toucher plutôt qu'au relâchement. `prefers-reduced-motion` coupe
+les ressorts (l'objet se pose directement), `prefers-reduced-transparency`
+rend les matières opaques et `prefers-contrast` durcit les bords.
 
 Deux requêtes par semaine affichée : la semaine filtrée sur le groupe
 (`?group=G1a`, ce qui est affiché) et la semaine complète, qui fournit les jours
