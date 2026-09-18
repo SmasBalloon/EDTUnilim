@@ -110,7 +110,7 @@ pub async fn create(
 
     // Un devoir de classe cherche sa confirmation dès qu'il est noté.
     if !personal {
-        account.notifier.homework_proposed(&item).await;
+        account.notifier.announce_proposed(item.clone());
     }
     Ok(Json(View::of(item, &user)))
 }
@@ -144,7 +144,7 @@ pub async fn edit(
 
     // Devenu un devoir de classe, il repart en attente de confirmation.
     if updated.is_pending() && !item.is_pending() {
-        account.notifier.homework_proposed(&updated).await;
+        account.notifier.announce_proposed(updated.clone());
     }
     Ok(Json(View::of(updated, &user)))
 }
@@ -187,7 +187,7 @@ pub async fn confirm(
         .await?
         .ok_or(ApiError::UnknownRoute)?;
     info!(id = confirmed.id, by = user.id, "devoir confirmé");
-    account.notifier.homework_confirmed(&confirmed).await;
+    account.notifier.announce_confirmed(confirmed.clone());
     Ok(Json(View::of(confirmed, &user)))
 }
 

@@ -190,6 +190,18 @@ async fn one_cannot_note_a_homework_for_another_class() {
     refused.assert_status(StatusCode::BAD_REQUEST);
 }
 
+/// Discord met du temps à répondre : les messages privés ne doivent pas pour
+/// autant retarder la réponse à l'interaction.
+async fn discord_dms_are_slow(upstream: &MockServer) {
+    Mock::given(method("POST"))
+        .and(path("/discord/users/@me/channels"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(r#"{"id":"900"}"#).set_delay(Duration::from_secs(5)),
+        )
+        .mount(upstream)
+        .await;
+}
+
 /// Signe une requête comme Discord le fait : horodatage puis corps.
 fn signed(server: &TestServer, body: &Value) -> axum_test::TestRequest {
     let key = SigningKey::from_bytes(&KEY_SEED);
@@ -225,6 +237,40 @@ async fn discord_interactions_must_be_signed() {
 
     // Sans signature du tout non plus.
     setup.ada.post("/api/v1/discord/interactions").json(&ping).await.assert_status(StatusCode::UNAUTHORIZED);
+}
+
+/// Discord abandonne au bout de trois secondes : « l'application n'a pas
+/// répondu à temps ». Prévenir une classe demande deux requêtes par personne,
+/// donc l'annonce doit partir de son côté, sans retenir la réponse.
+#[tokio::test]
+async fn an_interaction_answers_without_waiting_for_discord() {
+    let upstream = MockServer::start().await;
+    discord_dms_are_slow(&upstream).await;
+    let setup = setup(&upstream).await;
+
+    let add = json!({
+        "type": 2,
+        "user": { "id": "42" },
+        "data": {
+            "name": "devoir",
+            "options": [{
+                "name": "ajouter",
+                "type": 1,
+                "options": [
+                    { "name": "intitule", "value": "Exercices 3 à 7" },
+                    { "name": "portee", "value": "group" },
+                ],
+            }],
+        },
+    });
+
+    let answered = tokio::time::timeout(Duration::from_secs(1), signed(&setup.ada, &add)).await;
+    let answer: Value = answered.expect("réponse rendue sans attendre Discord").json();
+    assert!(answer["data"]["content"].as_str().expect("réponse").contains("Noté"));
+
+    // Et le devoir est bien enregistré, lui, avant que la réponse parte.
+    let list: Value = setup.bob.get("/api/v1/homework").await.json();
+    assert_eq!(list.as_array().expect("liste").len(), 1);
 }
 
 #[tokio::test]

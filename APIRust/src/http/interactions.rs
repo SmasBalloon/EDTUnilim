@@ -319,7 +319,7 @@ async fn add_command(state: &Arc<AppState>, user: &User, data: &Value) -> Value 
         Ok(item) => {
             info!(id = item.id, author = user.id, "devoir noté depuis Discord");
             if !personal {
-                account.notifier.homework_proposed(&item).await;
+                account.notifier.announce_proposed(item.clone());
                 reply(&format!(
                     "📝 Noté {} : {}\nLa classe est prévenue ; il apparaîtra chez tout le monde dès que quelqu'un l'aura confirmé.",
                     item.audience.label(item.year),
@@ -379,7 +379,7 @@ async fn button(state: &Arc<AppState>, interaction: &Interaction) -> Value {
             match confirmed {
                 Ok(Some(item)) => {
                     info!(id = item.id, by = user.id, "devoir confirmé depuis Discord");
-                    account.notifier.homework_confirmed(&item).await;
+                    account.notifier.announce_confirmed(item.clone());
                     reply(&format!("✅ Confirmé : {}. La classe est prévenue.", item.summary()))
                 }
                 _ => reply("Je n'ai pas réussi à le confirmer."),
