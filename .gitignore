@@ -1,4 +1,4 @@
-# Variables d'environnement locales
+²# Variables d'environnement locales
 .env
 .env.*
 !.env.example

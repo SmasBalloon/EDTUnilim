@@ -1,10 +1,24 @@
-import { Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount } from 'solid-js';
+import {
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  on,
+  onCleanup,
+  onMount,
+  type Component,
+  type JSX,
+} from 'solid-js';
 import {
   CalendarDays,
   Columns2,
   DoorOpen,
   Download,
   GraduationCap,
+  LayoutGrid,
+  List,
   Settings,
   UserRound,
 } from 'lucide-solid';
@@ -14,7 +28,7 @@ import { diff, recall, remember, slotKey, weekKey, type Change } from './lib/cha
 import { groupBases, groupLabel, weekDays } from './lib/groups';
 import { downloadIcs } from './lib/ics';
 import { clock, greeting, periodLabel, resolveCurrentWeek } from './lib/time';
-import { settings, update } from './lib/settings';
+import { settings, update, type ViewMode } from './lib/settings';
 import { AccountPage } from './components/AccountPage';
 import { ChangesBar } from './components/ChangesBar';
 import { ComparePage } from './components/ComparePage';
@@ -54,6 +68,52 @@ const TITLES: Record<Exclude<Page, 'timetable'>, [string, string]> = {
   rooms: ['Salles', 'Libres ou occupées, maintenant ou à l’heure choisie.'],
   account: ['Compte', 'Ta classe et tes messages privés sur Discord.'],
 };
+
+/**
+ * Une commande du bandeau.
+ *
+ * Toutes ont le même gabarit et la même matière ; seule l'icône change. Le
+ * libellé n'est pas affiché mais reste dit, à la souris comme au lecteur
+ * d'écran : à cette taille, sept libellés ne tiendraient pas sur une ligne.
+ */
+const Action: Component<{
+  label: string;
+  /** Page en cours : « vous êtes ici », pour qui écoute la page. */
+  current?: boolean;
+  /** Choix retenu, pour une commande à deux états. */
+  pressed?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: JSX.Element;
+}> = (props) => (
+  <button
+    type="button"
+    class="button button--on-accent"
+    title={props.label}
+    aria-label={props.label}
+    aria-current={props.current ? 'page' : undefined}
+    aria-pressed={props.pressed}
+    disabled={props.disabled}
+    onClick={props.onClick}
+  >
+    {props.children}
+  </button>
+);
+
+/** Les pages, dans l'ordre où elles se suivent dans le bandeau. */
+const NAV: { page: Page; label: string; icon: () => JSX.Element }[] = [
+  { page: 'timetable', label: 'Emploi du temps', icon: () => <CalendarDays size={16} aria-hidden="true" /> },
+  { page: 'compare', label: 'Comparer deux classes', icon: () => <Columns2 size={16} aria-hidden="true" /> },
+  { page: 'teachers', label: 'Emploi du temps d’un enseignant', icon: () => <GraduationCap size={16} aria-hidden="true" /> },
+  { page: 'rooms', label: 'Salles libres', icon: () => <DoorOpen size={16} aria-hidden="true" /> },
+  { page: 'account', label: 'Compte Discord', icon: () => <UserRound size={16} aria-hidden="true" /> },
+];
+
+/** Les deux façons de lire la semaine. */
+const VIEWS: { value: ViewMode; label: string; icon: () => JSX.Element }[] = [
+  { value: 'grid', label: 'Grille horaire', icon: () => <LayoutGrid size={16} aria-hidden="true" /> },
+  { value: 'list', label: 'Liste par jour', icon: () => <List size={16} aria-hidden="true" /> },
+];
 
 export function App() {
   const [page, setPage] = createSignal<Page>(pageFromHash());
@@ -263,45 +323,27 @@ export function App() {
               </div>
 
               <div class="banner__actions">
-                <Show
-                  when={page() === 'timetable'}
-                  fallback={
-                    <button
-                      type="button"
-                      class="button button--on-accent"
-                      title="Emploi du temps"
-                      aria-label="Emploi du temps"
-                      onClick={() => goTo('timetable')}
-                    >
-                      <CalendarDays size={16} aria-hidden="true" />
-                      <span class="button__label">Emploi du temps</span>
-                    </button>
-                  }
-                >
-                  {/* Sur téléphone, le choix de l'affichage vit dans les
-                      réglages : le bandeau garde ce qui change de page. */}
-                  <div class="banner__views">
-                    <button
-                      type="button"
-                      class="button button--on-accent"
-                      aria-pressed={settings().view === 'grid'}
-                      onClick={() => update({ view: 'grid' })}
-                    >
-                      Grille
-                    </button>
-                    <button
-                      type="button"
-                      class="button button--on-accent"
-                      aria-pressed={settings().view === 'list'}
-                      onClick={() => update({ view: 'list' })}
-                    >
-                      Liste
-                    </button>
+                {/* L'affichage de la semaine : deux états d'une même chose,
+                    donc un sélecteur — et il ne paraît que là où il agit. */}
+                <Show when={page() === 'timetable' || page() === 'teachers'}>
+                  <div class="banner__group banner__views" role="group" aria-label="Affichage de la semaine">
+                    <For each={VIEWS}>
+                      {(item) => (
+                        <Action
+                          label={item.label}
+                          pressed={settings().view === item.value}
+                          onClick={() => update({ view: item.value })}
+                        >
+                          {item.icon()}
+                        </Action>
+                      )}
+                    </For>
                   </div>
-                  <button
-                    type="button"
-                    class="button button--on-accent"
-                    title="Exporter la semaine (.ics)"
+                </Show>
+
+                <Show when={page() === 'timetable'}>
+                  <Action
+                    label="Exporter la semaine (.ics)"
                     disabled={!data()}
                     onClick={() => {
                       const loadedWeek = data();
@@ -311,58 +353,29 @@ export function App() {
                     }}
                   >
                     <Download size={16} aria-hidden="true" />
-                    <span class="button__label">.ics</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="button button--on-accent"
-                    title="Comparer deux classes"
-                    aria-label="Comparer deux classes"
-                    onClick={() => goTo('compare')}
-                  >
-                    <Columns2 size={16} aria-hidden="true" />
-                    <span class="button__label">Comparer</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="button button--on-accent"
-                    title="Emploi du temps d'un enseignant"
-                    aria-label="Emploi du temps d'un enseignant"
-                    onClick={() => goTo('teachers')}
-                  >
-                    <GraduationCap size={16} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    class="button button--on-accent"
-                    title="Salles libres"
-                    aria-label="Salles libres"
-                    onClick={() => goTo('rooms')}
-                  >
-                    <DoorOpen size={16} aria-hidden="true" />
-                    <span class="button__label">Salles</span>
-                  </button>
+                  </Action>
                 </Show>
-                <Show when={page() !== 'account'}>
-                  <button
-                    type="button"
-                    class="button button--on-accent"
-                    title="Compte Discord"
-                    aria-label="Compte Discord"
-                    onClick={() => goTo('account')}
-                  >
-                    <UserRound size={16} aria-hidden="true" />
-                  </button>
-                </Show>
-                <button
-                  type="button"
-                  class="button button--on-accent"
-                  title="Réglages"
-                  aria-label="Réglages"
-                  onClick={() => setShowSettings(true)}
-                >
+
+                {/* Les pages sont toutes là, toujours dans le même ordre, et
+                    celle qu'on regarde est marquée : on sait où l'on est et
+                    ce qu'il y a à côté, sans que le bandeau se réarrange. */}
+                <nav class="banner__group" aria-label="Pages">
+                  <For each={NAV}>
+                    {(item) => (
+                      <Action
+                        label={item.label}
+                        current={page() === item.page}
+                        onClick={() => goTo(item.page)}
+                      >
+                        {item.icon()}
+                      </Action>
+                    )}
+                  </For>
+                </nav>
+
+                <Action label="Réglages" onClick={() => setShowSettings(true)}>
                   <Settings size={16} aria-hidden="true" />
-                </button>
+                </Action>
               </div>
             </header>
 
