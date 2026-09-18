@@ -2,7 +2,8 @@
 
 use std::fmt;
 
-use serde::{Serialize, Serializer};
+use serde::de::{self, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::Date;
 
 /// Nature d'un créneau, déduite de la couleur de la case dans le PDF.
@@ -75,6 +76,31 @@ impl Serialize for ClockTime {
     }
 }
 
+/// `08:30` relu tel qu'il a été écrit : les devoirs enregistrés désignent un
+/// créneau par son heure de début.
+impl<'de> Deserialize<'de> for ClockTime {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct AsText;
+
+        impl Visitor<'_> for AsText {
+            type Value = ClockTime;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("un horaire au format HH:MM")
+            }
+
+            fn visit_str<E: de::Error>(self, text: &str) -> Result<ClockTime, E> {
+                let (hours, minutes) = text.split_once(':').ok_or_else(|| E::custom("HH:MM attendu"))?;
+                let hours: i64 = hours.parse().map_err(E::custom)?;
+                let minutes: i64 = minutes.parse().map_err(E::custom)?;
+                Ok(ClockTime::from_minutes(hours * 60 + minutes))
+            }
+        }
+
+        deserializer.deserialize_str(AsText)
+    }
+}
+
 /// Une ressource du programme national (`R1.01`, `S3.01A`, …).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Resource {
@@ -131,7 +157,10 @@ impl Course {
     }
 }
 
-fn matches_group(group: &str, wanted: &str) -> bool {
+/// Deux libellés de groupe qui se recouvrent : `G1` couvre `G1a`, et
+/// réciproquement. C'est la règle de lecture des emplois du temps, et celle de
+/// la portée d'un devoir.
+pub fn matches_group(group: &str, wanted: &str) -> bool {
     let (group, wanted) = (group.trim(), wanted.trim());
     let common = group.len().min(wanted.len());
     common > 0
@@ -164,15 +193,46 @@ pub struct Timetable {
 
 /// Sérialisation des dates au format ISO 8601 (`2026-08-31`).
 pub mod iso_date {
-    use serde::Serializer;
+    use serde::de::Error as _;
+    use serde::{Deserialize, Deserializer, Serializer};
     use time::macros::format_description;
     use time::Date;
 
+    pub const FORMAT: &[time::format_description::FormatItem<'_>] =
+        format_description!("[year]-[month]-[day]");
+
     pub fn serialize<S: Serializer>(date: &Date, serializer: S) -> Result<S::Ok, S::Error> {
-        let format = format_description!("[year]-[month]-[day]");
-        match date.format(&format) {
+        match date.format(&FORMAT) {
             Ok(text) => serializer.serialize_str(&text),
             Err(_) => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Date, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        Date::parse(&text, &FORMAT).map_err(D::Error::custom)
+    }
+}
+
+/// La même chose, pour une date qui peut manquer — un devoir sans échéance.
+pub mod opt_iso_date {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use time::Date;
+
+    pub fn serialize<S: Serializer>(date: &Option<Date>, serializer: S) -> Result<S::Ok, S::Error> {
+        match date {
+            Some(date) => super::iso_date::serialize(date, serializer),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Date>, D::Error> {
+        let text = Option::<String>::deserialize(deserializer)?;
+        match text {
+            Some(text) => Date::parse(&text, &super::iso_date::FORMAT)
+                .map(Some)
+                .map_err(serde::de::Error::custom),
+            None => Ok(None),
         }
     }
 }

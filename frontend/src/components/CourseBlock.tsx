@@ -1,6 +1,7 @@
 import { Show, type Component } from 'solid-js';
 
 import type { Course } from '../lib/api';
+import { homework, onCourse } from '../lib/homework';
 import { KIND_LABEL } from '../lib/layout';
 
 interface Props {
@@ -21,7 +22,11 @@ interface Props {
 }
 
 /** Une case de la grille horaire ; le détail s'ouvre en modal. */
-export const CourseBlock: Component<Props> = (props) => (
+export const CourseBlock: Component<Props> = (props) => {
+  /** Un devoir rattaché à ce créneau précis. */
+  const noted = () => homework().some((item) => onCourse(item, props.course));
+
+  return (
   <button
     type="button"
     class={`course-block kind-${props.course.kind}`}
@@ -59,9 +64,13 @@ export const CourseBlock: Component<Props> = (props) => (
     </Show>
 
     <span class="course-block__meta">
+      <Show when={noted()}>
+        <span class="course-block__noted" title="Un devoir est rattaché à ce cours">✎</span>
+      </Show>
       {props.describe
         ? props.describe(props.course)
         : [props.course.room, props.course.teacher].filter(Boolean).join(' · ')}
     </span>
   </button>
-);
+  );
+};

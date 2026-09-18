@@ -56,6 +56,15 @@ VITE_API_URL=https://edt.exemple.fr npm run build
   écart — « salle : 205 → 208 ». Les définitions sont celles de l'API pour ses
   messages Discord (`src/notify.rs`), pour qu'un changement se lise pareil des
   deux côtés.
+- **Devoirs** (`#devoirs`), pour qui est connecté : ce qu'il y a à faire, coché
+  au fur et à mesure. Chaque devoir se note **pour soi** ou **pour sa classe**,
+  avec la portée qui convient — le demi-groupe d'un TP, le groupe d'un TD,
+  l'année d'un amphi. Un devoir de classe n'apparaît chez les autres qu'une
+  fois **confirmé par quelqu'un d'autre** que celui qui l'a noté. Depuis un
+  cours, on note un devoir déjà rempli (matière, date, portée) ; et un devoir
+  noté avant la publication de la semaine se **rattache plus tard** au créneau,
+  d'un bouton dans le détail du cours. Les cours qui portent un devoir se
+  repèrent à une plume sur la grille.
 - **Enseignants** (`#enseignants`) : la semaine d'un enseignant, les trois
   années réunies dans une même grille, avec la classe sur chaque case. Son nom,
   dans le détail d'un cours, y mène directement. L'API rattache « LD » à
@@ -96,6 +105,7 @@ VITE_API_URL=https://edt.exemple.fr npm run build
 | `src/lib/settings.ts` | réglages persistés et thème |
 | `src/lib/motion.ts` | ressorts, projection de l'élan, résistance aux bords |
 | `src/lib/changes.ts` | comparaison d'une semaine avec la version déjà vue |
+| `src/lib/homework.ts` | les devoirs : lecture, écriture, portée, rattachement |
 | `src/lib/media.ts` | requêtes média lues comme des signaux |
 | `src/components/WeekView.tsx` | la semaine, en grille ou en liste, feuilletée au doigt |
 | `src/components/Pager.tsx` | les pages côte à côte que le doigt fait défiler |
@@ -104,6 +114,8 @@ VITE_API_URL=https://edt.exemple.fr npm run build
 | `src/components/ComparePage.tsx` | le choix des deux classes à comparer |
 | `src/components/TeachersPage.tsx` | la semaine d'un enseignant, toutes années |
 | `src/components/ChangesBar.tsx` | l'annonce des changements, et leur détail |
+| `src/components/TodoPage.tsx` | les devoirs : à confirmer, à faire, faits |
+| `src/components/HomeworkSheet.tsx` | le formulaire d'un devoir |
 | `src/components/CompareGrid.tsx` | les deux emplois du temps, colonne contre colonne |
 | `src/components/CourseBlock.tsx` | une case de cours, repliée ou agrandie |
 | `src/app.css` | toute la feuille de style : jetons, thèmes, base, mise en page, composants |

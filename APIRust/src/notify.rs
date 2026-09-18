@@ -10,7 +10,8 @@ use std::sync::Arc;
 
 use tracing::{info, warn};
 
-use crate::discord::{Attachment, Discord, DiscordError};
+use crate::discord::{Attachment, Button, ButtonStyle, Discord, DiscordError};
+use crate::homework::Homework;
 use crate::ics;
 use crate::model::{Course, CourseKind, Period, Timetable};
 use crate::users::{User, UserStore};
@@ -74,6 +75,32 @@ pub fn diff<'a>(before: &'a Timetable, after: &'a Timetable, group: &str) -> Cha
     removed.sort_by_key(order);
     modified.sort_by_key(|(old, _)| (old.date, old.start, old.groups.clone()));
     Changes { added, removed, modified }
+}
+
+/// « R1.05 — Exercices 3 à 7 (pour le 21/09) »
+pub fn describe_homework(item: &Homework) -> String {
+    let mut text = format!("**{}**", item.summary());
+    if let Some(due) = item.due {
+        text.push_str(&format!(" — pour le {}", french_date(due)));
+    }
+    if let Some(details) = &item.details {
+        text.push_str(&format!("\n> {details}"));
+    }
+    text
+}
+
+/// Un intitulé assez court pour tenir sur un bouton Discord.
+fn short_label(item: &Homework) -> String {
+    let summary = item.summary();
+    match summary.char_indices().nth(72) {
+        Some((cut, _)) => format!("Fait : {}…", &summary[..cut]),
+        None => format!("Fait : {summary}"),
+    }
+}
+
+/// `21/09`
+fn french_date(day: time::Date) -> String {
+    format!("{:02}/{:02}", day.day(), u8::from(day.month()))
 }
 
 fn kind_label(kind: CourseKind) -> &'static str {
@@ -271,6 +298,74 @@ impl Notifier {
                 self.discord.send_dm(&user.id, &text, Some(&calendar(timetable, group))).await
             }
             None => self.discord.send_dm(&user.id, &intro, None).await,
+        }
+    }
+
+    // --- Devoirs -----------------------------------------------------------
+
+    /// Un devoir de classe vient d'être noté : la classe est invitée à le
+    /// confirmer. Son auteur ne reçoit rien — il sait déjà.
+    pub async fn homework_proposed(&self, item: &Homework) {
+        let text = format!(
+            "📝 **{}** propose un devoir {} :\n{}\nConfirme-le s'il est exact — il n'apparaîtra pour tout le monde qu'ensuite.",
+            item.author_name,
+            item.audience.label(item.year),
+            describe_homework(item),
+        );
+        let buttons = vec![Button {
+            id: format!("hw:confirm:{}", item.id),
+            label: "Confirmer".into(),
+            style: ButtonStyle::Success,
+        }];
+        self.to_class(item, &text, buttons).await;
+    }
+
+    /// Le devoir est confirmé : il devient officiel pour la classe.
+    pub async fn homework_confirmed(&self, item: &Homework) {
+        let confirmed = item.confirmed_name.as_deref().unwrap_or("quelqu'un");
+        let text = format!(
+            "✅ Devoir confirmé par **{confirmed}** {} :\n{}",
+            item.audience.label(item.year),
+            describe_homework(item),
+        );
+        let buttons = vec![Button {
+            id: format!("hw:done:{}", item.id),
+            label: "Marquer comme fait".into(),
+            style: ButtonStyle::Primary,
+        }];
+        self.to_class(item, &text, buttons).await;
+    }
+
+    /// Rappel de la veille : ce qui est à rendre demain et qui n'est pas fait.
+    pub async fn homework_due_tomorrow(&self, user: &User, items: &[&Homework]) {
+        if items.is_empty() {
+            return;
+        }
+        let list: Vec<String> = items.iter().map(|item| format!("• {}", describe_homework(item))).collect();
+        let text = format!("⏰ Pour demain, il te reste :\n{}", list.join("\n"));
+        let buttons = items
+            .iter()
+            .take(5)
+            .map(|item| Button {
+                id: format!("hw:done:{}", item.id),
+                label: short_label(item),
+                style: ButtonStyle::Primary,
+            })
+            .collect();
+        if let Err(error) = self.discord.send_dm_with(&user.id, &text, None, buttons).await {
+            warn!(%error, user = user.id, "rappel de devoir impossible");
+        }
+    }
+
+    /// Écrit à la classe visée par un devoir, sauf à celui qui l'a noté.
+    async fn to_class(&self, item: &Homework, text: &str, buttons: Vec<Button>) {
+        for user in self.users.subscribers(item.year).await {
+            if user.id == item.author || !item.visible_to(&user) {
+                continue;
+            }
+            if let Err(error) = self.discord.send_dm_with(&user.id, text, None, buttons.clone()).await {
+                warn!(%error, user = user.id, "message privé impossible");
+            }
         }
     }
 

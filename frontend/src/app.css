@@ -2371,3 +2371,199 @@ h2,
   text-decoration: line-through;
   text-decoration-color: color-mix(in oklab, var(--color-accent) 70%, transparent);
 }
+
+/* --- Devoirs -------------------------------------------------------------- */
+
+.todo__add {
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.todo-page {
+  display: grid;
+  gap: 1.5rem;
+  padding: 0 var(--space-edge) 1.5rem;
+  max-width: 44rem;
+  margin: 0 auto;
+}
+
+.todo-section .rooms-state__caption {
+  margin: 0 0 0.5rem;
+}
+
+.todo-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.todo {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+/* Un devoir fait s'efface sans disparaître : on doit pouvoir le décocher. */
+.todo--done {
+  opacity: 0.55;
+}
+
+.todo--done .todo__title {
+  text-decoration: line-through;
+}
+
+/* Une proposition n'engage encore personne : elle se distingue d'un liseré. */
+.todo--pending {
+  border-inline-start: 3px solid color-mix(in oklab, var(--color-accent) 60%, transparent);
+}
+
+.todo__check {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  margin-top: 0.125rem;
+  padding: 0;
+  border: 1.5px solid color-mix(in oklab, var(--color-muted) 60%, transparent);
+  border-radius: 0.5rem;
+  background: none;
+  color: var(--color-on-accent);
+  cursor: pointer;
+  transition:
+    background-color var(--settle) var(--ease-out),
+    border-color var(--settle) var(--ease-out),
+    transform var(--settle) var(--ease-out);
+}
+
+.todo__check:active {
+  transform: scale(0.9);
+  transition-duration: var(--press);
+}
+
+.todo__check[aria-checked="true"] {
+  border-color: transparent;
+  background: var(--color-accent);
+}
+
+.todo__badge {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid color-mix(in oklab, var(--color-accent) 50%, transparent);
+  border-radius: 999px;
+  color: var(--color-accent);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.todo__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.todo__title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+  font-weight: 500;
+}
+
+.todo__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  margin: 0.25rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+.todo__details {
+  margin: 0.375rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  white-space: pre-line;
+}
+
+.todo__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+/* --- Le devoir, depuis un cours ------------------------------------------- */
+
+.course-modal__homework {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-line);
+}
+
+.course-modal__notes {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0 0 0.625rem;
+  padding: 0;
+  list-style: none;
+}
+
+.course-modal__note {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.course-modal__note-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sur la grille, une plume dit qu'un devoir attend à ce créneau. */
+.course-block__noted {
+  margin-right: 0.25rem;
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.homework__linked {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-elevated);
+  font-size: 0.875rem;
+}
+
+.homework__linked span::first-letter {
+  text-transform: uppercase;
+}
+
+/* Un champ qui prend toute la largeur de la feuille. */
+.input--block {
+  display: block;
+  width: 100%;
+  font: inherit;
+  font-size: 0.9375rem;
+}
+
+textarea.input {
+  resize: vertical;
+  line-height: 1.5;
+}

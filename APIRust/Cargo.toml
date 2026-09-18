@@ -21,6 +21,7 @@ time = { version = "0.3", features = ["formatting", "parsing", "macros", "serde-
 hmac = "0.12"
 sha2 = "0.10"
 getrandom = "0.3"
+ed25519-dalek = "2.2.0"
 
 [dev-dependencies]
 axum-test = "21"

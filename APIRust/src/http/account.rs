@@ -15,6 +15,7 @@ use tracing::{info, warn};
 use crate::config::YEARS;
 use crate::discord::Discord;
 use crate::error::ApiError;
+use crate::homework::HomeworkStore;
 use crate::notify::Notifier;
 use crate::session::{self, Signer, OAUTH_COOKIE, OAUTH_TTL, SESSION_COOKIE, SESSION_TTL};
 use crate::users::{User, UserStore};
@@ -25,6 +26,8 @@ use super::AppState;
 pub struct Account {
     pub discord: Discord,
     pub users: Arc<UserStore>,
+    /// Les devoirs notés par les personnes connectées.
+    pub homework: Arc<HomeworkStore>,
     pub notifier: Notifier,
     pub signer: Signer,
     /// Adresse publique du site, sans barre oblique finale.
@@ -51,7 +54,8 @@ impl Account {
         response
     }
 
-    async fn current_user(&self, headers: &HeaderMap) -> Result<User, ApiError> {
+    /// La personne connectée, d'après le cookie de session.
+    pub async fn user_from(&self, headers: &HeaderMap) -> Result<User, ApiError> {
         let token = session::read_cookie(headers, SESSION_COOKIE).ok_or(ApiError::Unauthenticated)?;
         let id = self.signer.verify(&token).ok_or(ApiError::Unauthenticated)?;
         self.users.get(&id).await.ok_or(ApiError::Unauthenticated)
@@ -171,7 +175,7 @@ impl From<User> for Me {
 /// La personne connectée.
 pub async fn me(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Result<Response, ApiError> {
     let account = account(&state)?;
-    let user = account.current_user(&headers).await?;
+    let user = account.user_from(&headers).await?;
     Ok(([(axum::http::header::CACHE_CONTROL, "no-store")], Json(Me::from(user))).into_response())
 }
 
@@ -220,7 +224,7 @@ pub async fn update(
 ) -> Result<Json<Updated>, ApiError> {
     let account = account(&state)?;
     let Json(body) = body.map_err(|rejection| ApiError::BadRequest(rejection.body_text()))?;
-    let before = account.current_user(&headers).await?;
+    let before = account.user_from(&headers).await?;
 
     if body.year.is_some_and(|year| !YEARS.contains(&year)) {
         return Err(ApiError::BadRequest("année inconnue".to_owned()));
@@ -276,7 +280,7 @@ pub async fn logout(State(state): State<Arc<AppState>>) -> Result<Response, ApiE
 /// Supprime le compte et ferme la session.
 pub async fn delete(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Result<Response, ApiError> {
     let account = account(&state)?;
-    let user = account.current_user(&headers).await?;
+    let user = account.user_from(&headers).await?;
     account.users.delete(&user.id).await?;
     info!(user = user.id, "compte supprimé");
     Ok((StatusCode::NO_CONTENT, [(SET_COOKIE, account.clear_session())]).into_response())

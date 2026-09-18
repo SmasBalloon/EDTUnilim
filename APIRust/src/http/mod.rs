@@ -1,6 +1,8 @@
 //! Couche HTTP : routage et état partagé.
 
 mod account;
+mod homework;
+mod interactions;
 mod meta;
 mod timetable;
 
@@ -11,7 +13,7 @@ use axum::extract::rejection::PathRejection;
 use axum::extract::{FromRequestParts, Path};
 use axum::http::request::Parts;
 use axum::http::StatusCode;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::Router;
 use serde::de::DeserializeOwned;
 use tower_http::compression::CompressionLayer;
@@ -50,12 +52,20 @@ where
 }
 
 pub use account::Account;
+pub use interactions::commands;
 
 pub struct AppState {
     pub store: Arc<Store>,
     pub upstream: String,
     /// Connexion Discord ; absente, les routes du compte répondent `auth_disabled`.
     pub account: Option<Arc<Account>>,
+}
+
+impl AppState {
+    /// Les fonctions qui demandent un compte, ou la raison de leur absence.
+    pub fn account(&self) -> Result<&Arc<Account>, ApiError> {
+        self.account.as_ref().ok_or(ApiError::AuthDisabled)
+    }
 }
 
 pub fn router(config: &Config, store: Arc<Store>, account: Option<Arc<Account>>) -> Router {
@@ -73,6 +83,11 @@ pub fn router(config: &Config, store: Arc<Store>, account: Option<Arc<Account>>)
         .route("/api/v1/auth/callback", get(account::callback))
         .route("/api/v1/auth/logout", post(account::logout))
         .route("/api/v1/me", get(account::me).put(account::update).delete(account::delete))
+        .route("/api/v1/homework", get(homework::list).post(homework::create))
+        .route("/api/v1/homework/{id}", put(homework::edit).delete(homework::delete))
+        .route("/api/v1/homework/{id}/confirm", post(homework::confirm))
+        .route("/api/v1/homework/{id}/done", put(homework::done))
+        .route("/api/v1/discord/interactions", post(interactions::handle))
         .fallback(|| async { ApiError::UnknownRoute })
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())

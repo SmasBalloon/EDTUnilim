@@ -24,6 +24,11 @@ cargo run --release
 | `GET /api/v1/years/{year}/weeks/{week}` | emploi du temps d'une semaine |
 | `GET /api/v1/resources` | référentiel des ressources et SAÉ |
 | `GET /api/v1/teachers` | enseignants connus, et leurs autres écritures |
+| `GET/POST /api/v1/homework` | devoirs visibles, et nouveau devoir |
+| `PUT/DELETE /api/v1/homework/{id}` | corriger, effacer (son auteur seul) |
+| `POST /api/v1/homework/{id}/confirm` | confirmer un devoir de classe |
+| `PUT /api/v1/homework/{id}/done` | cocher « fait », pour soi |
+| `POST /api/v1/discord/interactions` | commandes slash et boutons du bot |
 
 L'emploi du temps accepte deux filtres cumulables :
 
@@ -133,6 +138,48 @@ quelle. Pour lister celles qui attendent un nom :
 python3 scripts/enseignants-inconnus.py http://localhost:3000
 # Nom ?;JP     —  49 créneaux : R1.10, R3.12, R5A.14 (BUT 1/BUT 2/BUT 3)
 ```
+
+### Les devoirs
+
+Un devoir appartient à quelqu'un — toutes ces routes demandent une session.
+
+**Sa portée se choisit** : pour soi seul, pour son demi-groupe (le TP), pour
+son groupe (le TD) ou pour toute l'année (l'amphi). On ne note un devoir que
+pour sa propre classe : `G1a` peut viser `G1a`, `G1` ou l'année, jamais `G2`.
+
+**Un devoir de classe engage les autres**, donc il n'est officiel qu'une fois
+qu'une deuxième personne l'a confirmé — son auteur ne peut pas se confirmer
+lui-même. En attendant, la classe le voit marqué `pending` : il faut bien que
+quelqu'un puisse le lire pour l'accepter.
+
+**« Fait » ne vaut que pour soi** : chacun coche sa propre liste, sur un devoir
+que toute la classe partage.
+
+Un devoir se rattache à un créneau (`course`), ou pas encore : quand la semaine
+n'est pas publiée, on note d'abord la matière, et le rattachement se fait plus
+tard depuis le cours. Les devoirs dont la date de rendu est passée depuis un
+mois s'effacent d'eux-mêmes.
+
+### Le bot
+
+Avec `EDT_DISCORD_PUBLIC_KEY`, le bot répond aussi aux commandes. Discord
+n'ouvre pas de connexion permanente : il appelle
+`POST /api/v1/discord/interactions`, signé, et la réponse part dans le même
+échange. Il faut donc déclarer cette adresse dans le portail Discord
+(« Interactions Endpoint URL ») ; Discord la vérifie en la sondant, y compris
+avec de fausses signatures, que la route refuse par un `401`.
+
+| Commande | Effet |
+| --- | --- |
+| `/devoirs [matiere] [etat]` | liste ce qui est à faire, avec un bouton « fait » |
+| `/devoir ajouter intitule:… [matiere] [pour] [portee] [details]` | note un devoir |
+
+Les réponses sont éphémères : elles ne s'affichent que pour la personne qui a
+tapé la commande. Les commandes se redéclarent à chaque démarrage du service.
+
+Les messages privés suivent la vie d'un devoir : proposition à confirmer (avec
+le bouton qui va bien), confirmation, puis rappel la veille du rendu de ce qui
+n'est pas coché — vers 19 h, heure de Paris.
 
 Les emplois du temps analysés restent en mémoire, les PDF téléchargés sur
 disque — ce qui permet de continuer à répondre si le serveur du département est

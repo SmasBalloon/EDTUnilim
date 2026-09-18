@@ -23,6 +23,8 @@ pub enum ApiError {
     UnknownRoute,
     #[error("connexion requise")]
     Unauthenticated,
+    #[error("{0}")]
+    Forbidden(&'static str),
     #[error("la connexion Discord n'est pas configurée sur ce serveur")]
     AuthDisabled,
     #[error("enregistrement impossible")]
@@ -42,6 +44,7 @@ impl ApiError {
                 StatusCode::NOT_FOUND
             }
             Self::Unauthenticated => StatusCode::UNAUTHORIZED,
+            Self::Forbidden(_) => StatusCode::FORBIDDEN,
             Self::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::UpstreamUnavailable(_) | Self::UpstreamUnexpected => StatusCode::BAD_GATEWAY,
@@ -54,6 +57,7 @@ impl ApiError {
             Self::UnknownWeek { .. } => "unknown_week",
             Self::BadRequest(_) => "bad_request",
             Self::UnknownRoute => "unknown_route",
+            Self::Forbidden(_) => "forbidden",
             Self::UnknownYear(_) => "unknown_year",
             Self::UpstreamUnavailable(_) => "upstream_unavailable",
             Self::UpstreamUnexpected => "upstream_unexpected",

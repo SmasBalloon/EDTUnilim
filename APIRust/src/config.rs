@@ -51,6 +51,9 @@ pub struct DiscordConfig {
     pub known_guild_ids: Vec<String>,
     /// Clé de signature des cookies de session.
     pub session_secret: String,
+    /// Clé publique de l'application Discord : sans elle, les commandes slash
+    /// restent éteintes, car on ne saurait pas vérifier ce qui nous arrive.
+    pub public_key: Option<String>,
     pub api_base: String,
 }
 
@@ -62,6 +65,7 @@ impl std::fmt::Debug for DiscordConfig {
             .field("guild_id", &self.guild_id)
             .field("known_guild_ids", &self.known_guild_ids)
             .field("api_base", &self.api_base)
+            .field("slash_commands", &self.public_key.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -142,6 +146,7 @@ fn discord() -> Result<Option<DiscordConfig>, ConfigError> {
             .map(|ids| ids.split(',').map(str::trim).filter(|id| !id.is_empty()).map(str::to_owned).collect())
             .unwrap_or_default(),
         session_secret,
+        public_key: var("EDT_DISCORD_PUBLIC_KEY").map(|key| key.trim().to_owned()),
         api_base: var("EDT_DISCORD_API")
             .unwrap_or_else(|| DEFAULT_DISCORD_API.to_owned())
             .trim_end_matches('/')

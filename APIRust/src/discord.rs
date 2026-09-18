@@ -51,6 +51,47 @@ impl DiscordUser {
     }
 }
 
+/// Un bouton sous un message.
+#[derive(Debug, Clone)]
+pub struct Button {
+    /// Ce que le bouton déclenche, relu tel quel à l'appui : `hw:done:<id>`.
+    pub id: String,
+    pub label: String,
+    pub style: ButtonStyle,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ButtonStyle {
+    /// Bleu : l'action attendue.
+    Primary,
+    /// Vert : ce qui acquiesce.
+    Success,
+    /// Gris : ce qui n'engage à rien.
+    Secondary,
+}
+
+impl ButtonStyle {
+    fn code(self) -> u8 {
+        match self {
+            Self::Primary => 1,
+            Self::Secondary => 2,
+            Self::Success => 3,
+        }
+    }
+}
+
+fn action_row(buttons: &[Button]) -> Vec<serde_json::Value> {
+    buttons
+        .iter()
+        .map(|button| json!({
+            "type": 2,
+            "style": button.style.code(),
+            "label": button.label,
+            "custom_id": button.id,
+        }))
+        .collect()
+}
+
 /// Une pièce jointe : nom de fichier et contenu.
 pub struct Attachment {
     pub filename: String,
@@ -144,6 +185,20 @@ impl Discord {
         content: &str,
         attachment: Option<&Attachment>,
     ) -> Result<(), DiscordError> {
+        self.send_dm_with(user_id, content, attachment, Vec::new()).await
+    }
+
+    /// Le même message privé, avec des boutons sous le texte.
+    ///
+    /// Un devoir proposé se confirme d'un geste depuis la notification, sans
+    /// repasser par le site : c'est là qu'on la lit, autant pouvoir y répondre.
+    pub async fn send_dm_with(
+        &self,
+        user_id: &str,
+        content: &str,
+        attachment: Option<&Attachment>,
+        buttons: Vec<Button>,
+    ) -> Result<(), DiscordError> {
         #[derive(Deserialize)]
         struct Channel {
             id: String,
@@ -156,7 +211,10 @@ impl Discord {
 
         let url = format!("{}/channels/{}/messages", self.config.api_base, channel.id);
         // Pas de mention : un nom de groupe ou de salle ne doit notifier personne.
-        let payload = json!({ "content": content, "allowed_mentions": { "parse": [] } });
+        let mut payload = json!({ "content": content, "allowed_mentions": { "parse": [] } });
+        if !buttons.is_empty() {
+            payload["components"] = json!([{ "type": 1, "components": action_row(&buttons) }]);
+        }
 
         let mut attempt = 0;
         loop {
@@ -182,6 +240,27 @@ impl Discord {
             }
             return check(response).await.map(drop);
         }
+    }
+
+    /// Clé publique de l'application, quand les commandes slash sont montées.
+    pub fn public_key(&self) -> Option<&str> {
+        self.config.public_key.as_deref()
+    }
+
+    /// Déclare les commandes slash du bot sur le serveur configuré.
+    ///
+    /// Un serveur les reçoit sur-le-champ, là où les commandes globales mettent
+    /// jusqu'à une heure à se propager.
+    pub async fn register_commands(&self, commands: &serde_json::Value) -> Result<(), DiscordError> {
+        let url = format!(
+            "{}/applications/{}/guilds/{}/commands",
+            self.config.api_base, self.config.client_id, self.config.guild_id
+        );
+        let request = self
+            .bot(self.client.put(url))
+            .header(CONTENT_TYPE, "application/json")
+            .body(commands.to_string());
+        self.send(request).await.map(drop)
     }
 
     fn bot(&self, request: RequestBuilder) -> RequestBuilder {

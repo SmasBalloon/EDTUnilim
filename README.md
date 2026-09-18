@@ -31,6 +31,7 @@ variables d'environnement — copier `.env.example` en `.env` pour les changer :
 | `EDT_PUBLIC_URL` | `http://localhost:8080` | adresse publique du site, base de l'URL de retour OAuth |
 | `EDT_DISCORD_CLIENT_ID`, `EDT_DISCORD_CLIENT_SECRET` | — | application Discord (OAuth2) |
 | `EDT_DISCORD_BOT_TOKEN` | — | bot qui envoie les messages privés |
+| `EDT_DISCORD_PUBLIC_KEY` | — | clé publique de l'application : allume les commandes slash |
 | `EDT_DISCORD_GUILD_ID` | — | serveur où les personnes connectées sont ajoutées |
 | `EDT_DISCORD_KNOWN_GUILD_IDS` | — | serveurs où se trouve déjà le bot, séparés par des virgules : leurs membres ne sont pas ajoutés |
 | `EDT_SESSION_SECRET` | — | clé de signature des sessions (32 caractères au moins) |

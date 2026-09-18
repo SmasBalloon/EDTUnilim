@@ -18,6 +18,7 @@ import {
   Download,
   GraduationCap,
   LayoutGrid,
+  ListChecks,
   List,
   Settings,
   UserRound,
@@ -25,6 +26,7 @@ import {
 
 import { ApiError, clearCache, fetchWeek, fetchYears, type Course } from './lib/api';
 import { diff, recall, remember, slotKey, weekKey, type Change } from './lib/changes';
+import { loadHomework, type Draft } from './lib/homework';
 import { groupBases, groupLabel, weekDays } from './lib/groups';
 import { downloadIcs } from './lib/ics';
 import { clock, greeting, periodLabel, resolveCurrentWeek } from './lib/time';
@@ -33,21 +35,24 @@ import { AccountPage } from './components/AccountPage';
 import { ChangesBar } from './components/ChangesBar';
 import { ComparePage } from './components/ComparePage';
 import { CourseModal } from './components/CourseModal';
+import { HomeworkSheet } from './components/HomeworkSheet';
 import { RoomsPage } from './components/RoomsPage';
 import { TeachersPage } from './components/TeachersPage';
+import { TodoPage } from './components/TodoPage';
 import { SettingsSheet } from './components/SettingsSheet';
 import { Setup } from './components/Setup';
 import { StatusCard } from './components/StatusCard';
 import { WeekBar } from './components/WeekBar';
 import { WeekView } from './components/WeekView';
 
-type Page = 'timetable' | 'compare' | 'teachers' | 'rooms' | 'account';
+type Page = 'timetable' | 'compare' | 'teachers' | 'rooms' | 'todo' | 'account';
 
 const HASHES: Record<Page, string> = {
   timetable: '',
   compare: 'comparer',
   teachers: 'enseignants',
   rooms: 'salles',
+  todo: 'devoirs',
   account: 'compte',
 };
 
@@ -59,6 +64,7 @@ function pageFromHash(): Page {
   if (location.hash === '#salles') return 'rooms';
   if (location.hash === '#comparer') return 'compare';
   if (location.hash === '#enseignants') return 'teachers';
+  if (location.hash === '#devoirs') return 'todo';
   return location.hash.startsWith('#compte') ? 'account' : 'timetable';
 }
 
@@ -66,6 +72,7 @@ const TITLES: Record<Exclude<Page, 'timetable'>, [string, string]> = {
   compare: ['Comparer', 'Deux classes côte à côte, heure par heure.'],
   teachers: ['Enseignants', 'La semaine d\u2019un enseignant, les trois années réunies.'],
   rooms: ['Salles', 'Libres ou occupées, maintenant ou à l’heure choisie.'],
+  todo: ['Devoirs', 'Ce qu’il y a à faire, pour toi ou pour ta classe.'],
   account: ['Compte', 'Ta classe et tes messages privés sur Discord.'],
 };
 
@@ -106,6 +113,7 @@ const NAV: { page: Page; label: string; icon: () => JSX.Element }[] = [
   { page: 'compare', label: 'Comparer deux classes', icon: () => <Columns2 size={16} aria-hidden="true" /> },
   { page: 'teachers', label: 'Emploi du temps d’un enseignant', icon: () => <GraduationCap size={16} aria-hidden="true" /> },
   { page: 'rooms', label: 'Salles libres', icon: () => <DoorOpen size={16} aria-hidden="true" /> },
+  { page: 'todo', label: 'Devoirs à faire', icon: () => <ListChecks size={16} aria-hidden="true" /> },
   { page: 'account', label: 'Compte Discord', icon: () => <UserRound size={16} aria-hidden="true" /> },
 ];
 
@@ -124,6 +132,8 @@ export function App() {
   const [week, setWeek] = createSignal<number | null>(null);
   const [selected, setSelected] = createSignal<Course | null>(null);
   const [showSettings, setShowSettings] = createSignal(false);
+  /** Le devoir en cours de rédaction, préparé par le cours d'où il vient. */
+  const [noting, setNoting] = createSignal<Partial<Draft> | null>(null);
 
   const summary = createMemo(() => years()?.find((item) => item.year === settings().year));
   const weeks = () => summary()?.weeks ?? [];
@@ -262,6 +272,8 @@ export function App() {
     }
   };
 
+  onMount(() => void loadHomework());
+
   onMount(() => {
     const onHash = () => {
       setPage(pageFromHash());
@@ -384,6 +396,8 @@ export function App() {
               fallback={
                 page() === 'rooms' ? (
                   <RoomsPage years={loaded()} onSelect={setSelected} />
+                ) : page() === 'todo' ? (
+                  <TodoPage />
                 ) : page() === 'teachers' ? (
                   <TeachersPage
                     years={loaded()}
@@ -488,7 +502,27 @@ export function App() {
               </footer>
             </Show>
 
-            <CourseModal course={selected()} onClose={() => setSelected(null)} />
+            <CourseModal
+              course={selected()}
+              slot={
+                page() === 'timetable' && settings().year !== null && week() !== null
+                  ? { year: settings().year ?? 0, week: week() ?? 0 }
+                  : undefined
+              }
+              onNote={(draft) => {
+                // Une feuille à la fois : le détail du cours s'efface derrière
+                // le formulaire qu'il vient d'ouvrir.
+                setSelected(null);
+                setNoting(draft);
+              }}
+              onClose={() => setSelected(null)}
+            />
+
+            <HomeworkSheet
+              open={noting() !== null}
+              initial={noting()}
+              onClose={() => setNoting(null)}
+            />
 
             <SettingsSheet
               open={showSettings()}

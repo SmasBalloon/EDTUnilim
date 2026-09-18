@@ -70,6 +70,17 @@ impl UserStore {
             .collect()
     }
 
+    /// Toutes les personnes à prévenir, quelle que soit leur année.
+    pub async fn subscribers_all(&self) -> Vec<User> {
+        self.users
+            .read()
+            .await
+            .values()
+            .filter(|user| user.notify && user.year.is_some() && user.group.is_some())
+            .cloned()
+            .collect()
+    }
+
     /// Crée le compte à la première connexion, ou rafraîchit nom et avatar.
     pub async fn sign_in(&self, id: &str, name: &str, avatar: Option<String>) -> io::Result<User> {
         let mut users = self.users.write().await;

@@ -3,6 +3,7 @@ import { Hourglass } from 'lucide-solid';
 
 import type { Course } from '../lib/api';
 import { KIND_LABEL } from '../lib/layout';
+import { homework, onCourse } from '../lib/homework';
 import { clock, humanDuration, isRunning, nowMinutes, relativeDayLabel, toMinutes, todayIso } from '../lib/time';
 
 interface Props {
@@ -106,6 +107,8 @@ const CourseRow: Component<{
   onSelect: () => void;
 }> = (props) => {
   const live = () => isRunning(props.course, todayIso(clock()), nowMinutes(clock()));
+  /** Un devoir rattaché à ce créneau précis. */
+  const noted = () => homework().some((item) => onCourse(item, props.course));
 
   /** « Anglais avec JP », ou seulement l'un des deux quand l'autre manque. */
   const subject = () => {
@@ -136,6 +139,9 @@ const CourseRow: Component<{
           )}
         </Show>
         <span class="course-row__badges">
+          <Show when={noted()}>
+            <span class="course-block__noted" title="Un devoir est rattaché à ce cours">✎</span>
+          </Show>
           <span class="badge badge--kind">{KIND_LABEL[props.course.kind]}</span>
           <Show when={props.course.room}>
             {(room) => <span class="badge badge--accent">{room()}</span>}

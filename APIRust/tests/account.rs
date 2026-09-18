@@ -7,6 +7,7 @@ use axum::http::StatusCode;
 use axum_test::TestServer;
 use edt_unilim_api::config::{Config, DiscordConfig};
 use edt_unilim_api::discord::Discord;
+use edt_unilim_api::homework::HomeworkStore;
 use edt_unilim_api::http::{self, Account};
 use edt_unilim_api::notify::Notifier;
 use edt_unilim_api::session::Signer;
@@ -33,6 +34,7 @@ async fn setup(upstream: &MockServer) -> Setup {
         guild_id: "7".into(),
         known_guild_ids: vec!["5".into()],
         session_secret: "s".repeat(32),
+        public_key: None,
         api_base: format!("{}/discord", upstream.uri()),
     };
     let config = Config {
@@ -47,12 +49,14 @@ async fn setup(upstream: &MockServer) -> Setup {
     };
 
     let users = Arc::new(UserStore::open(state_dir.path()).await.expect("comptes"));
+    let homework = Arc::new(HomeworkStore::open(state_dir.path()).await.expect("devoirs"));
     let discord = Discord::new(discord_config.clone()).expect("client Discord");
     let notifier = Notifier::new(discord.clone(), Arc::clone(&users));
     let store = Arc::new(Store::new(&config).expect("store").with_notifier(notifier.clone()));
     let account = Arc::new(Account {
         discord,
         users,
+        homework,
         notifier,
         signer: Signer::new(&discord_config.session_secret),
         public_url: config.public_url.clone(),
