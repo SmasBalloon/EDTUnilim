@@ -15,5 +15,6 @@ pub mod notify;
 pub mod pdf;
 pub mod session;
 pub mod store;
+pub mod teachers;
 pub mod upstream;
 pub mod users;

@@ -101,8 +101,13 @@ pub struct Course {
     /// Intitulé tel qu'imprimé, présent surtout sur les grandes cases.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// Enseignant, ramené au même nom quelle que soit l'écriture du PDF.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub teacher: Option<String>,
+    /// Identifiant de cet enseignant, stable d'une semaine et d'une année à
+    /// l'autre : c'est par lui que se filtre son emploi du temps.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub teacher_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub room: Option<String>,
 }

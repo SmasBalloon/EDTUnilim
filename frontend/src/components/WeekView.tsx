@@ -17,6 +17,10 @@ interface Props {
   view: ViewMode;
   /** Ouvre le détail d'un cours. */
   onSelect: (course: Course) => void;
+  /** Remplace la ligne de détail d'un cours : voir `CourseBlock`. */
+  describe?: (course: Course) => string;
+  /** Dit d'un cours qu'il a bougé depuis la dernière visite. */
+  changed?: (course: Course) => string | undefined;
 }
 
 /** Hauteur d'une heure de grille, en pixels. */
@@ -89,6 +93,8 @@ const DayStrip: Component<ViewProps> = (props) => (
           <DayCard
             date={day.date}
             courses={props.byDay.get(day.date) ?? []}
+            describe={props.describe}
+            changed={props.changed}
             onSelect={props.onSelect}
           />
         </div>
@@ -161,6 +167,8 @@ const TimeGrid: Component<ViewProps> = (props) => {
                     course={placed.course}
                     live={isRunning(placed.course, today(), minutes())}
                     dense={slot < 62}
+                    describe={props.describe}
+                    changed={props.changed?.(placed.course)}
                     onSelect={() => props.onSelect(placed.course)}
                     style={{
                       top: `${offset(toMinutes(placed.course.start)) + 1}px`,

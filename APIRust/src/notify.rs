@@ -305,6 +305,7 @@ mod tests {
             resource: Some(Resource { code: "R1.05".into(), name: None }),
             title: None,
             teacher: Some("Dupont M.".into()),
+            teacher_id: Some("dupont-m".into()),
             room: Some(room.into()),
         }
     }

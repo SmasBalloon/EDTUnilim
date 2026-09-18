@@ -4,6 +4,7 @@ import { X } from 'lucide-solid';
 import type { Course } from '../lib/api';
 import { groupLabel } from '../lib/groups';
 import { KIND_LABEL } from '../lib/layout';
+import { update } from '../lib/settings';
 import { humanDuration, longDate } from '../lib/time';
 import { Sheet } from './Sheet';
 
@@ -60,7 +61,25 @@ export const CourseModal: Component<Props> = (props) => {
                 {(teacher) => (
                   <>
                     <dt>Enseignant</dt>
-                    <dd>{teacher()}</dd>
+                    <dd>
+                      {/* Son nom mène à sa semaine : c'est de là qu'on se
+                          demande le plus souvent où il enseigne par ailleurs. */}
+                      <Show when={course().teacher_id} fallback={teacher()}>
+                        {(id) => (
+                          <button
+                            type="button"
+                            class="course-modal__teacher"
+                            onClick={() => {
+                              update({ teacher: id() });
+                              props.onClose();
+                              location.hash = 'enseignants';
+                            }}
+                          >
+                            {teacher()}
+                          </button>
+                        )}
+                      </Show>
+                    </dd>
                 </>
               )}
             </Show>

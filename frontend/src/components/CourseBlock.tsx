@@ -11,6 +11,10 @@ interface Props {
   dense: boolean;
   /** En comparaison : les deux classes suivent ce cours ensemble. */
   together?: boolean;
+  /** Remplace la ligne « salle · enseignant » quand elle n'apprend rien. */
+  describe?: (course: Course) => string;
+  /** Ce cours a bougé depuis la dernière visite : `added` ou `modified`. */
+  changed?: string;
   /** Position et hauteur, calculées par la grille. */
   style: Record<string, string>;
   onSelect: () => void;
@@ -21,11 +25,21 @@ export const CourseBlock: Component<Props> = (props) => (
   <button
     type="button"
     class={`course-block kind-${props.course.kind}`}
-    classList={{ 'course-block--live': props.live, 'course-block--together': props.together }}
+    classList={{
+      'course-block--live': props.live,
+      'course-block--together': props.together,
+      'course-block--changed': props.changed !== undefined,
+    }}
     style={props.style}
     title={props.together ? 'Les deux classes y sont ensemble' : undefined}
     onClick={props.onSelect}
   >
+    <Show when={props.changed}>
+      {(change) => (
+        <span class="course-block__flag" title={`Cours ${change() === 'added' ? 'ajouté' : 'modifié'} depuis ta dernière visite`} />
+      )}
+    </Show>
+
     <span class="course-block__head">
       <span class="course-block__time">
         {props.course.start}
@@ -45,7 +59,9 @@ export const CourseBlock: Component<Props> = (props) => (
     </Show>
 
     <span class="course-block__meta">
-      {[props.course.room, props.course.teacher].filter(Boolean).join(' · ')}
+      {props.describe
+        ? props.describe(props.course)
+        : [props.course.room, props.course.teacher].filter(Boolean).join(' · ')}
     </span>
   </button>
 );

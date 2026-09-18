@@ -23,6 +23,7 @@ cargo run --release
 | `GET /api/v1/years/{year}/weeks` | semaines disponibles pour une année |
 | `GET /api/v1/years/{year}/weeks/{week}` | emploi du temps d'une semaine |
 | `GET /api/v1/resources` | référentiel des ressources et SAÉ |
+| `GET /api/v1/teachers` | enseignants connus, et leurs autres écritures |
 
 L'emploi du temps accepte deux filtres cumulables :
 
@@ -111,6 +112,27 @@ couleur et pose du texte par-dessus. La lecture se fait en trois temps.
    cours : sa couleur donne la nature, sa largeur les horaires, sa hauteur les
    groupes (une case de demi-hauteur vise un demi-groupe), et les textes qu'il
    contient la ressource, l'enseignant et la salle.
+
+### Les enseignants
+
+Le PDF nomme la même personne de deux façons : « Dubreuil L. » quand la case
+est grande, « LD » quand elle est étroite. `data/teachers.csv` les réunit, et
+l'API rend alors toujours le même `teacher` et le même `teacher_id` — c'est par
+cet identifiant que se filtre l'emploi du temps d'un enseignant.
+
+Le fichier reste court : les initiales « prénom puis nom » sont déduites du nom
+(« Mérillou N. » → « NM »), et ne le sont plus dès que deux personnes se les
+disputent. On n'y écrit donc que ce qui ne se devine pas — « BX » pour
+Bombeaux C. —, et ce qui n'est pas quelqu'un : les libellés de groupe qui
+tombent dans la case de l'enseignant sur certaines SAÉ.
+
+Une écriture qu'il ne connaît pas n'est pas perdue, elle est rendue telle
+quelle. Pour lister celles qui attendent un nom :
+
+```bash
+python3 scripts/enseignants-inconnus.py http://localhost:3000
+# Nom ?;JP     —  49 créneaux : R1.10, R3.12, R5A.14 (BUT 1/BUT 2/BUT 3)
+```
 
 Les emplois du temps analysés restent en mémoire, les PDF téléchargés sur
 disque — ce qui permet de continuer à répondre si le serveur du département est

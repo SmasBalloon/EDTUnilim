@@ -26,6 +26,8 @@ export interface Settings {
    * `null` veut dire « la mienne » : la comparaison suit alors le groupe suivi.
    */
   compare: { left: Side | null; right: Side | null };
+  /** Enseignant suivi sur sa page, par son identifiant : `dubreuil-l`. */
+  teacher: string | null;
 }
 
 const KEY = 'edt-unilim/settings';
@@ -36,6 +38,7 @@ const DEFAULTS: Settings = {
   view: 'list',
   theme: 'dark',
   compare: { left: null, right: null },
+  teacher: null,
 };
 
 function load(): Settings {

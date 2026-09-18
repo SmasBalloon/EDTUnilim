@@ -9,6 +9,10 @@ interface Props {
   date: string;
   courses: Course[];
   onSelect: (course: Course) => void;
+  /** Remplace « intitulé avec enseignant » quand celui-ci n'apprend rien. */
+  describe?: (course: Course) => string;
+  /** Dit d'un cours qu'il a bougé depuis la dernière visite. */
+  changed?: (course: Course) => string | undefined;
 }
 
 /** Une journée se lit comme une suite d'heures, de cours et de trous. */
@@ -58,7 +62,14 @@ export const DayCard: Component<Props> = (props) => {
           <For each={rows()}>
             {(row) => (
               <Show when={row.kind === 'course' ? row.course : null} fallback={<Marker row={row} />}>
-                {(course) => <CourseRow course={course()} onSelect={() => props.onSelect(course())} />}
+                {(course) => (
+                  <CourseRow
+                    course={course()}
+                    describe={props.describe}
+                    changed={props.changed?.(course())}
+                    onSelect={() => props.onSelect(course())}
+                  />
+                )}
               </Show>
             )}
           </For>
@@ -88,11 +99,17 @@ const Marker: Component<{ row: Row }> = (props) => (
 );
 
 /** Une ligne de cours ; le détail s'ouvre en modal. */
-const CourseRow: Component<{ course: Course; onSelect: () => void }> = (props) => {
+const CourseRow: Component<{
+  course: Course;
+  describe?: (course: Course) => string;
+  changed?: string;
+  onSelect: () => void;
+}> = (props) => {
   const live = () => isRunning(props.course, todayIso(clock()), nowMinutes(clock()));
 
   /** « Anglais avec JP », ou seulement l'un des deux quand l'autre manque. */
   const subject = () => {
+    if (props.describe) return props.describe(props.course);
     const name = props.course.resource?.name ?? props.course.title;
     const teacher = props.course.teacher ? `avec ${props.course.teacher}` : '';
     return [name, teacher].filter(Boolean).join(' ');
@@ -110,6 +127,13 @@ const CourseRow: Component<{ course: Course; onSelect: () => void }> = (props) =
         </span>
         <Show when={live()}>
           <span class="badge badge--accent">en cours</span>
+        </Show>
+        <Show when={props.changed}>
+          {(change) => (
+            <span class="badge badge--change">
+              {change() === 'added' ? 'ajouté' : 'modifié'}
+            </span>
+          )}
         </Show>
         <span class="course-row__badges">
           <span class="badge badge--kind">{KIND_LABEL[props.course.kind]}</span>

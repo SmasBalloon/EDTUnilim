@@ -13,6 +13,12 @@ export interface Resource {
 export interface Course {
   day: string;
   date: string;
+  /**
+   * Année du BUT. L'API ne la porte pas sur un créneau — elle est celle de la
+   * semaine demandée : la page des enseignants, qui réunit les trois années
+   * dans une même grille, l'attache elle-même à chaque cours.
+   */
+  year?: number;
   start: string;
   end: string;
   duration_minutes: number;
@@ -21,7 +27,17 @@ export interface Course {
   resource?: Resource;
   title?: string;
   teacher?: string;
+  /** Identifiant de l'enseignant, le même quelle que soit l'écriture du PDF. */
+  teacher_id?: string;
   room?: string;
+}
+
+/** Un enseignant du référentiel de l'API. */
+export interface Teacher {
+  id: string;
+  name: string;
+  /** Autres écritures rencontrées dans les PDF : `LD`, `BX`. */
+  aliases: string[];
 }
 
 export interface Period {
@@ -105,6 +121,11 @@ function cached<T>(key: string, load: (fresh: boolean) => Promise<T>): Promise<T
   });
   cache.set(key, pending);
   return pending;
+}
+
+/** Les enseignants connus. La liste ne change qu'avec l'équipe pédagogique. */
+export function fetchTeachers(): Promise<Teacher[]> {
+  return cached('teachers', (fresh) => get<Teacher[]>('/api/v1/teachers', fresh));
 }
 
 export function fetchYears(): Promise<YearSummary[]> {

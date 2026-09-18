@@ -2,8 +2,8 @@
 
 use time::{Date, Duration, Month};
 
-use crate::catalog;
 use crate::model::{ClockTime, Course, CourseKind, Period, Resource, Timetable};
+use crate::{catalog, teachers};
 
 use super::content::FilledArea;
 use super::geometry::Span;
@@ -116,6 +116,9 @@ fn build_course(
     }
 
     let block = parse_block(&lines.iter().map(|(_, text)| *text).collect::<Vec<_>>());
+    // La case nomme l'enseignant comme elle peut ; le référentiel dit de qui
+    // il s'agit, et écarte ce qui n'est pas quelqu'un.
+    let teacher = block.teacher.as_deref().and_then(teachers::resolve);
     Some(Course {
         day: day_name,
         date: period.start + Duration::days(day_index as i64),
@@ -126,7 +129,8 @@ fn build_course(
         groups,
         resource: block.code.map(|code| Resource { name: catalog::name_of(&code).map(str::to_owned), code }),
         title: block.title,
-        teacher: block.teacher,
+        teacher: teacher.as_ref().map(|named| named.name.clone()),
+        teacher_id: teacher.map(|named| named.id),
         room: block.room,
     })
 }

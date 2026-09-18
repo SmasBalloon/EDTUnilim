@@ -2131,3 +2131,198 @@ h2,
   border-style: dashed;
   border-inline-start-style: solid;
 }
+
+/* --- Enseignants ---------------------------------------------------------- */
+
+.teachers {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.teachers__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+/* Le nom ne s'étire pas sur toute la carte : il garde la taille d'un bouton. */
+.teachers__head .compare__pick {
+  flex: 0 1 auto;
+  justify-content: space-between;
+  min-width: 12rem;
+  gap: 0.75rem;
+}
+
+/* Le champ de recherche tient la poignée de la feuille : il précède la liste. */
+.teachers__search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0 0.625rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-elevated);
+  color: var(--color-muted);
+}
+
+.teachers__search .input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  padding-inline: 0;
+}
+
+.teachers__search .input:focus {
+  outline: none;
+}
+
+.teachers__option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+/* Le nom de l'enseignant mène à sa semaine : il se lit comme un lien. */
+.course-modal__teacher {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  text-decoration-color: color-mix(in oklab, var(--color-accent) 60%, transparent);
+  cursor: pointer;
+}
+
+.course-modal__teacher:hover {
+  color: var(--color-accent);
+}
+
+/* --- Ce qui a changé ------------------------------------------------------ */
+
+/* Le bandeau reste jusqu'à ce qu'on l'écarte : un emploi du temps se consulte
+   en marchant, la nouvelle doit avoir le temps d'être lue. */
+.changes {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-shrink: 0;
+  margin: var(--space-gap) var(--space-edge) 0;
+  padding: 0.5rem 0.625rem 0.5rem 0.875rem;
+  border: 1px solid color-mix(in oklab, var(--color-accent) 40%, transparent);
+  border-radius: var(--radius-card);
+  background: color-mix(in oklab, var(--color-accent) 10%, var(--color-surface));
+}
+
+.changes__dot {
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+}
+
+.changes__text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+/* Sur la grille, un coin marqué suffit à dire où regarder. */
+.course-block--changed {
+  border-color: color-mix(in oklab, var(--color-accent) 55%, transparent);
+}
+
+.course-block__flag {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+}
+
+.badge--change {
+  border: 1px solid color-mix(in oklab, var(--color-accent) 55%, transparent);
+  color: var(--color-accent);
+}
+
+.change-list {
+  display: grid;
+  gap: 0.625rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.change {
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--color-line);
+  border-inline-start: 3px solid color-mix(in oklab, var(--kind) var(--kind-edge), transparent);
+  border-radius: var(--radius-control);
+  background: color-mix(in oklab, var(--kind) var(--kind-fill), var(--color-surface));
+}
+
+.change__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.change__kind {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.change--added .change__kind {
+  color: var(--kind-sae);
+}
+
+.change--removed .change__kind {
+  color: var(--color-accent);
+}
+
+.change--modified .change__kind {
+  color: var(--kind-td);
+}
+
+/* « mardi 15 septembre » : seule l'initiale se capitalise en français. */
+.change__when {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.change__when::first-letter {
+  text-transform: uppercase;
+}
+
+.change__what {
+  margin: 0.25rem 0 0;
+  font-weight: 500;
+}
+
+.change__details {
+  margin: 0.25rem 0 0;
+  padding-left: 1rem;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+.change--removed .change__what {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in oklab, var(--color-accent) 70%, transparent);
+}

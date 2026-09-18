@@ -50,6 +50,18 @@ VITE_API_URL=https://edt.exemple.fr npm run build
   jour au-dessus fait la même chose, en un toucher.
 - **Navigation** par semaine (flèches, `←` / `→` au clavier), bouton
   *Aujourd'hui*, semaine courante déduite des périodes publiées.
+- **Ce qui a changé** : la semaine affichée est comparée à la version vue la
+  fois précédente (gardée dans le navigateur). Un bandeau annonce ce qui a
+  bougé, les cases concernées portent une pastille, et la liste détaille chaque
+  écart — « salle : 205 → 208 ». Les définitions sont celles de l'API pour ses
+  messages Discord (`src/notify.rs`), pour qu'un changement se lise pareil des
+  deux côtés.
+- **Enseignants** (`#enseignants`) : la semaine d'un enseignant, les trois
+  années réunies dans une même grille, avec la classe sur chaque case. Son nom,
+  dans le détail d'un cours, y mène directement. L'API rattache « LD » à
+  « Dubreuil L. » (voir `data/teachers.csv` côté API), sans quoi la moitié de
+  ses cours manquerait à l'appel ; les écritures qu'elle ne nomme pas encore
+  apparaissent telles quelles dans le sélecteur.
 - **Comparer** (`#comparer`) : deux classes côte à côte, colonne contre
   colonne, sur la même échelle horaire. Chaque côté se choisit librement — son
   année et son groupe —, donc un BUT 1 se compare à un BUT 2 ; chacun est lu
@@ -83,12 +95,15 @@ VITE_API_URL=https://edt.exemple.fr npm run build
 | `src/lib/ics.ts` | export iCalendar |
 | `src/lib/settings.ts` | réglages persistés et thème |
 | `src/lib/motion.ts` | ressorts, projection de l'élan, résistance aux bords |
+| `src/lib/changes.ts` | comparaison d'une semaine avec la version déjà vue |
 | `src/lib/media.ts` | requêtes média lues comme des signaux |
 | `src/components/WeekView.tsx` | la semaine, en grille ou en liste, feuilletée au doigt |
 | `src/components/Pager.tsx` | les pages côte à côte que le doigt fait défiler |
 | `src/components/Sheet.tsx` | le plateau des boîtes de dialogue, tirable |
 | `src/components/WeekBar.tsx` | la semaine affichée, et de quoi en changer |
 | `src/components/ComparePage.tsx` | le choix des deux classes à comparer |
+| `src/components/TeachersPage.tsx` | la semaine d'un enseignant, toutes années |
+| `src/components/ChangesBar.tsx` | l'annonce des changements, et leur détail |
 | `src/components/CompareGrid.tsx` | les deux emplois du temps, colonne contre colonne |
 | `src/components/CourseBlock.tsx` | une case de cours, repliée ou agrandie |
 | `src/app.css` | toute la feuille de style : jetons, thèmes, base, mise en page, composants |

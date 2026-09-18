@@ -1,26 +1,38 @@
 import { Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount } from 'solid-js';
-import { CalendarDays, Columns2, DoorOpen, Download, Settings, UserRound } from 'lucide-solid';
+import {
+  CalendarDays,
+  Columns2,
+  DoorOpen,
+  Download,
+  GraduationCap,
+  Settings,
+  UserRound,
+} from 'lucide-solid';
 
 import { ApiError, clearCache, fetchWeek, fetchYears, type Course } from './lib/api';
+import { diff, recall, remember, slotKey, weekKey, type Change } from './lib/changes';
 import { groupBases, groupLabel, weekDays } from './lib/groups';
 import { downloadIcs } from './lib/ics';
 import { clock, greeting, periodLabel, resolveCurrentWeek } from './lib/time';
 import { settings, update } from './lib/settings';
 import { AccountPage } from './components/AccountPage';
+import { ChangesBar } from './components/ChangesBar';
 import { ComparePage } from './components/ComparePage';
 import { CourseModal } from './components/CourseModal';
 import { RoomsPage } from './components/RoomsPage';
+import { TeachersPage } from './components/TeachersPage';
 import { SettingsSheet } from './components/SettingsSheet';
 import { Setup } from './components/Setup';
 import { StatusCard } from './components/StatusCard';
 import { WeekBar } from './components/WeekBar';
 import { WeekView } from './components/WeekView';
 
-type Page = 'timetable' | 'compare' | 'rooms' | 'account';
+type Page = 'timetable' | 'compare' | 'teachers' | 'rooms' | 'account';
 
 const HASHES: Record<Page, string> = {
   timetable: '',
   compare: 'comparer',
+  teachers: 'enseignants',
   rooms: 'salles',
   account: 'compte',
 };
@@ -32,11 +44,13 @@ const HASHES: Record<Page, string> = {
 function pageFromHash(): Page {
   if (location.hash === '#salles') return 'rooms';
   if (location.hash === '#comparer') return 'compare';
+  if (location.hash === '#enseignants') return 'teachers';
   return location.hash.startsWith('#compte') ? 'account' : 'timetable';
 }
 
 const TITLES: Record<Exclude<Page, 'timetable'>, [string, string]> = {
   compare: ['Comparer', 'Deux classes côte à côte, heure par heure.'],
+  teachers: ['Enseignants', 'La semaine d\u2019un enseignant, les trois années réunies.'],
   rooms: ['Salles', 'Libres ou occupées, maintenant ou à l’heure choisie.'],
   account: ['Compte', 'Ta classe et tes messages privés sur Discord.'],
 };
@@ -105,6 +119,53 @@ export function App() {
     ({ year, group, week: target }) => fetchWeek(year, target, group),
   );
 
+  /**
+   * Ce qui a bougé dans la semaine affichée depuis la dernière fois qu'on l'a
+   * regardée. La première visite ne signale rien : elle ne fait que retenir.
+   */
+  const [changes, setChanges] = createSignal<Change[]>([]);
+
+  /** La semaine affichée, telle qu'on peut la mémoriser. */
+  const snapshot = () => {
+    const loaded = data();
+    const { year, group } = settings();
+    const target = week();
+    return loaded && year !== null && group !== null && target !== null
+      ? ({ key: weekKey(year, target, group), courses: loaded.filtered.courses } as const)
+      : null;
+  };
+
+  createEffect(() => {
+    const current = snapshot();
+    if (!current) {
+      setChanges([]);
+      return;
+    }
+    const seen = recall(current.key);
+    if (!seen) {
+      remember(current.key, current.courses);
+      setChanges([]);
+      return;
+    }
+    setChanges(diff(seen.courses, current.courses));
+  });
+
+  /** « J'ai vu » : la version affichée devient la référence. */
+  const markSeen = () => {
+    const current = snapshot();
+    if (current) remember(current.key, current.courses);
+    setChanges([]);
+  };
+
+  /** Les créneaux à signaler sur la grille, par créneau. */
+  const marks = createMemo(() => {
+    const map = new Map<string, string>();
+    for (const change of changes()) {
+      if (change.kind !== 'removed') map.set(slotKey(change.course), change.kind);
+    }
+    return map;
+  });
+
   /** Relit tout ce qui est affiché, sans passer par les caches. */
   const reload = () => {
     clearCache();
@@ -158,7 +219,7 @@ export function App() {
       }
       // Les flèches changent de semaine, sur l'emploi du temps comme sur la
       // comparaison : les deux pages en affichent une.
-      if (page() !== 'timetable' && page() !== 'compare') return;
+      if (page() === 'rooms' || page() === 'account') return;
       if (event.key === 'ArrowLeft') step(-1);
       if (event.key === 'ArrowRight') step(1);
     };
@@ -265,6 +326,15 @@ export function App() {
                   <button
                     type="button"
                     class="button button--on-accent"
+                    title="Emploi du temps d'un enseignant"
+                    aria-label="Emploi du temps d'un enseignant"
+                    onClick={() => goTo('teachers')}
+                  >
+                    <GraduationCap size={16} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    class="button button--on-accent"
                     title="Salles libres"
                     aria-label="Salles libres"
                     onClick={() => goTo('rooms')}
@@ -301,6 +371,17 @@ export function App() {
               fallback={
                 page() === 'rooms' ? (
                   <RoomsPage years={loaded()} onSelect={setSelected} />
+                ) : page() === 'teachers' ? (
+                  <TeachersPage
+                    years={loaded()}
+                    week={week()}
+                    current={currentWeek()}
+                    onWeek={(next) => {
+                      setWeek(next);
+                      setSelected(null);
+                    }}
+                    onSelect={setSelected}
+                  />
                 ) : page() === 'compare' ? (
                   <ComparePage
                     years={loaded()}
@@ -336,6 +417,10 @@ export function App() {
                 />
               </div>
 
+              <Show when={changes().length > 0}>
+                <ChangesBar changes={changes()} onSeen={markSeen} />
+              </Show>
+
               <main class="app__timetable">
                 <Show
                   when={data()}
@@ -364,6 +449,7 @@ export function App() {
                         week={loadedWeek().filtered}
                         days={weekDays(loadedWeek().structure)}
                         view={settings().view}
+                        changed={(course) => marks().get(slotKey(course))}
                         onSelect={setSelected}
                       />
                     </Show>
