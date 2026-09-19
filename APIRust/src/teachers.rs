@@ -295,6 +295,29 @@ Mérillou S.
         assert_eq!(ids.len(), unique, "deux enseignants portent le même identifiant");
     }
 
+    #[test]
+    fn guesses_initials_only_from_the_usual_shape() {
+        assert_eq!(initials_of("Mérillou N."), Some("NM".to_owned()));
+        assert_eq!(initials_of("Dubreuil L"), Some("LD".to_owned()));
+        assert_eq!(initials_of("Dubreuil"), None, "pas de prénom");
+        assert_eq!(initials_of("Dubreuil Louis"), None, "prénom en toutes lettres");
+    }
+
+    #[test]
+    fn folds_every_accented_letter_to_its_plain_form() {
+        assert_eq!(fold("àâäáåã ç èéêë ìíîï ñ òóôöõ ùúûü ýÿ œ æ"), "aaaaaaceeeeiiiinooooouuuuyyoa");
+        assert_eq!(fold("É-L'a"), "ela");
+        assert_eq!(slug("Œuvre  É."), "ouvre-e");
+    }
+
+    #[test]
+    fn resolves_through_the_shipped_registry() {
+        assert!(resolve("   ").is_none());
+        let stranger = resolve("Inconnu Z.").expect("une identité à part");
+        assert_eq!(stranger.id, "inconnu-z");
+        assert_eq!(stranger.name, "Inconnu Z.");
+    }
+
     /// Résout une écriture dans un référentiel d'essai.
     fn named(registry: &Registry, printed: &str) -> Option<Named> {
         registry.resolve(printed)

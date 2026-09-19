@@ -261,4 +261,67 @@ mod tests {
         assert_eq!(CourseKind::from_hex("#b3ffff"), Some(CourseKind::Tp));
         assert_eq!(CourseKind::from_hex("#123456"), None);
     }
+
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    struct Dated {
+        #[serde(with = "iso_date")]
+        day: Date,
+        #[serde(with = "opt_iso_date")]
+        due: Option<Date>,
+    }
+
+    #[test]
+    fn dates_round_trip_through_iso_8601() {
+        let value = Dated { day: time::macros::date!(2026 - 08 - 31), due: Some(time::macros::date!(2026 - 09 - 04)) };
+        let json = serde_json::to_string(&value).expect("sérialisé");
+        assert_eq!(json, r#"{"day":"2026-08-31","due":"2026-09-04"}"#);
+        assert_eq!(serde_json::from_str::<Dated>(&json).expect("relu"), value);
+
+        let open: Dated = serde_json::from_str(r#"{"day":"2026-08-31","due":null}"#).expect("sans échéance");
+        assert_eq!(open.due, None);
+        assert_eq!(serde_json::to_string(&open).expect("sérialisé"), r#"{"day":"2026-08-31","due":null}"#);
+    }
+
+    #[test]
+    fn rejects_dates_that_are_not_dates() {
+        assert!(serde_json::from_str::<Dated>(r#"{"day":"hier","due":null}"#).is_err());
+        assert!(serde_json::from_str::<Dated>(r#"{"day":"2026-08-31","due":"demain"}"#).is_err());
+    }
+
+    #[test]
+    fn clock_time_round_trips_as_text() {
+        let time = ClockTime::from_minutes(510);
+        assert_eq!(serde_json::to_string(&time).expect("sérialisé"), r#""08:30""#);
+        let back: ClockTime = serde_json::from_str(r#""08:30""#).expect("relu");
+        assert_eq!(back.minutes(), 510);
+        assert!(serde_json::from_str::<ClockTime>(r#""0830""#).is_err());
+        assert!(serde_json::from_str::<ClockTime>(r#""aa:bb""#).is_err());
+        assert!(serde_json::from_str::<ClockTime>("830").is_err());
+    }
+
+    #[test]
+    fn names_every_kind_of_course() {
+        let course = |kind| Course {
+            day: "LUNDI".into(),
+            date: time::macros::date!(2026 - 08 - 31),
+            start: ClockTime::from_minutes(480),
+            end: ClockTime::from_minutes(570),
+            duration_minutes: 90,
+            kind,
+            groups: vec!["G1".into()],
+            resource: None,
+            title: None,
+            teacher: None,
+            teacher_id: None,
+            room: None,
+        };
+        let codes: Vec<&str> =
+            [CourseKind::Tp, CourseKind::Sae, CourseKind::Td, CourseKind::Amphi, CourseKind::Controle]
+                .into_iter()
+                .map(|kind| course(kind).kind_code())
+                .collect();
+        assert_eq!(codes, ["tp", "sae", "td", "amphi", "controle"]);
+        assert!(course(CourseKind::Td).concerns("G1a"));
+        assert!(!course(CourseKind::Td).concerns("G2"));
+    }
 }
