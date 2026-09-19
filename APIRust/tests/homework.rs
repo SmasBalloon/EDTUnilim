@@ -376,3 +376,118 @@ async fn only_the_author_can_edit_and_a_class_note_asks_again() {
         .await
         .assert_status(StatusCode::BAD_REQUEST);
 }
+
+/// Le texte de la réponse du bot à une interaction.
+async fn said(server: &TestServer, body: Value) -> String {
+    let answer: Value = signed(server, &body).await.json();
+    answer["data"]["content"].as_str().expect("réponse textuelle").to_owned()
+}
+
+fn command(user: &str, name: &str, options: Value) -> Value {
+    json!({ "type": 2, "user": { "id": user }, "data": { "name": name, "options": options } })
+}
+
+fn add(options: Value) -> Value {
+    command("42", "devoir", json!([{ "name": "ajouter", "type": 1, "options": options }]))
+}
+
+fn press(user: &str, custom_id: &str) -> Value {
+    json!({ "type": 3, "member": { "user": { "id": user } }, "data": { "custom_id": custom_id } })
+}
+
+#[tokio::test]
+async fn the_bot_explains_what_went_wrong() {
+    let upstream = MockServer::start().await;
+    discord_accepts_dms(&upstream).await;
+    let setup = setup(&upstream).await;
+
+    // Une personne inconnue est invitée à se connecter, quelle que soit la commande.
+    let stranger = command("999", "devoirs", json!([]));
+    assert!(said(&setup.ada, stranger).await.contains("Connecte-toi"));
+    assert!(said(&setup.ada, press("999", "hw:done:1")).await.contains("connecte-toi"));
+
+    // Commande vide ou inconnue.
+    assert!(said(&setup.ada, json!({ "type": 2, "user": { "id": "42" } })).await.contains("vide"));
+    assert!(said(&setup.ada, command("42", "autre", json!([]))).await.contains("n'existe pas"));
+
+    // Un type d'interaction que le bot ne sait pas traiter.
+    assert!(said(&setup.ada, json!({ "type": 9 })).await.contains("Je ne sais pas"));
+
+    // `/devoir` sans sous-commande, sans intitulé, avec une date incompréhensible.
+    assert!(said(&setup.ada, command("42", "devoir", json!([]))).await.contains("Utilisation"));
+    assert!(said(&setup.ada, add(json!([]))).await.contains("intitulé"));
+    let bad_date = add(json!([{ "name": "intitule", "value": "x" }, { "name": "pour", "value": "bientôt" }]));
+    assert!(said(&setup.ada, bad_date).await.contains("bientôt"));
+}
+
+#[tokio::test]
+async fn the_bot_lists_by_subject_and_state() {
+    let upstream = MockServer::start().await;
+    discord_accepts_dms(&upstream).await;
+    let setup = setup(&upstream).await;
+
+    assert!(said(&setup.ada, command("42", "devoirs", json!([]))).await.contains("Rien à faire"));
+
+    // Un devoir personnel et un devoir de demi-groupe, de deux matières.
+    for (title, subject, scope) in [("Relire", "r1.01", "personal"), ("Exercices", "r1.05", "half")] {
+        let noted = add(json!([
+            { "name": "intitule", "value": title },
+            { "name": "matiere", "value": subject },
+            { "name": "portee", "value": scope },
+        ]));
+        let text = said(&setup.ada, noted).await;
+        assert!(text.contains("Noté"), "{text}");
+    }
+    let year =
+        add(json!([{ "name": "intitule", "value": "Pour tous" }, { "name": "portee", "value": "year" }]));
+    assert!(said(&setup.ada, year).await.contains("Noté"));
+
+    // Sa matière filtre, et le devoir en attente de confirmation est signalé.
+    let filtered = command("42", "devoirs", json!([{ "name": "matiere", "value": "r1.05" }]));
+    let text = said(&setup.ada, filtered).await;
+    assert!(text.contains("Exercices") && !text.contains("Relire"), "{text}");
+    assert!(text.contains("à confirmer"), "{text}");
+
+    // Rien n'est fait pour l'instant ; « tout » les montre, « faits » aucun.
+    let done = command("42", "devoirs", json!([{ "name": "etat", "value": "done" }]));
+    assert!(said(&setup.ada, done).await.contains("Rien à faire"));
+    let all = command("42", "devoirs", json!([{ "name": "etat", "value": "all" }]));
+    assert!(said(&setup.ada, all).await.contains("Relire"));
+
+    // Cocher un devoir le fait passer dans « faits ».
+    let mine: Value = setup.ada.get("/api/v1/homework").await.json();
+    let personal =
+        mine.as_array().expect("liste").iter().find(|item| item["title"] == "Relire").expect("noté");
+    let id = personal["id"].as_str().expect("identifiant");
+    assert!(said(&setup.ada, press("42", &format!("hw:done:{id}"))).await.contains("coché"));
+    let done = command("42", "devoirs", json!([{ "name": "etat", "value": "done" }]));
+    assert!(said(&setup.ada, done).await.contains("Relire"));
+}
+
+#[tokio::test]
+async fn buttons_refuse_what_they_cannot_do() {
+    let upstream = MockServer::start().await;
+    discord_accepts_dms(&upstream).await;
+    let setup = setup(&upstream).await;
+
+    let class = json!([{ "name": "intitule", "value": "Exercices" }, { "name": "portee", "value": "group" }]);
+    said(&setup.ada, add(class)).await;
+    let list: Value = setup.ada.get("/api/v1/homework").await.json();
+    let id = list[0]["id"].as_str().expect("identifiant").to_owned();
+
+    // Un bouton sans identifiant, mal formé, d'une action inconnue ou d'un devoir disparu.
+    assert!(said(&setup.ada, json!({ "type": 3, "user": { "id": "42" }, "data": {} }))
+        .await
+        .contains("pas ce qu'il fait"));
+    assert!(said(&setup.ada, press("42", "n-importe-quoi")).await.contains("Bouton inconnu"));
+    assert!(said(&setup.ada, press("42", "hw:oublier:x")).await.contains("n'existe plus"));
+    assert!(said(&setup.ada, press("42", &format!("hw:oublier:{id}"))).await.contains("Bouton inconnu"));
+
+    // On ne confirme pas son propre devoir.
+    let own = said(&setup.ada, press("42", &format!("hw:confirm:{id}"))).await;
+    assert!(own.contains("c'est toi qui l'as noté"), "{own}");
+
+    // Bob le confirme ; un second essai est refusé.
+    assert!(said(&setup.bob, press("43", &format!("hw:confirm:{id}"))).await.contains("Confirmé"));
+    assert!(said(&setup.bob, press("43", &format!("hw:confirm:{id}"))).await.contains("déjà confirmé"));
+}

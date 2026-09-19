@@ -365,3 +365,212 @@ fn collect_strings(operands: &[Object], out: &mut String) {
 fn cmyk_to_rgb(c: f64, m: f64, y: f64, k: f64) -> Rgb {
     Rgb::from_unit((1.0 - c) * (1.0 - k), (1.0 - m) * (1.0 - k), (1.0 - y) * (1.0 - k))
 }
+
+#[cfg(test)]
+mod tests {
+    use lopdf::{dictionary, Stream};
+
+    use super::*;
+
+    fn op(operator: &str, operands: Vec<Object>) -> Operation {
+        Operation::new(operator, operands)
+    }
+
+    fn reals(values: &[f32]) -> Vec<Object> {
+        values.iter().map(|value| Object::Real(*value)).collect()
+    }
+
+    fn text(value: &str) -> Vec<Object> {
+        vec![Object::string_literal(value)]
+    }
+
+    /// Fait tourner des opérations sur un document vide.
+    fn run(operations: Vec<Operation>) -> Primitives {
+        let document = Document::new();
+        let mut interpreter = Interpreter::new(&document);
+        interpreter.run(&Content { operations }, &Dictionary::new(), 0);
+        interpreter.finish()
+    }
+
+    /// Un carré rempli dans la couleur préparée par `paint`.
+    fn square(mut paint: Vec<Operation>) -> Primitives {
+        paint.push(op("re", reals(&[0.0, 0.0, 10.0, 10.0])));
+        paint.push(op("f", Vec::new()));
+        run(paint)
+    }
+
+    #[test]
+    fn reads_every_way_of_writing_a_fill_color() {
+        let color = |paint: Vec<Operation>| square(paint).fills[0].color.to_hex();
+
+        assert_eq!(color(vec![op("rg", reals(&[1.0, 0.0, 0.0]))]), "#ff0000");
+        assert_eq!(color(vec![op("g", reals(&[1.0]))]), "#ffffff");
+        assert_eq!(color(vec![op("k", reals(&[0.0, 0.0, 0.0, 1.0]))]), "#000000");
+        assert_eq!(color(vec![op("k", reals(&[0.0, 0.0, 0.0, 0.0]))]), "#ffffff");
+        assert_eq!(color(vec![op("sc", reals(&[1.0]))]), "#ffffff");
+        assert_eq!(color(vec![op("scn", reals(&[0.0, 1.0, 0.0]))]), "#00ff00");
+        assert_eq!(color(vec![op("sc", reals(&[0.0, 0.0, 0.0, 0.0]))]), "#ffffff");
+        // Deux opérandes ne désignent aucune couleur : la précédente reste.
+        assert_eq!(color(vec![op("rg", reals(&[0.0, 0.0, 1.0])), op("sc", reals(&[1.0, 1.0]))]), "#0000ff");
+    }
+
+    #[test]
+    fn fills_the_bounding_box_of_whatever_was_drawn() {
+        let drawn = run(vec![
+            op("m", reals(&[0.0, 0.0])),
+            op("l", reals(&[4.0, 1.0])),
+            op("c", reals(&[5.0, 5.0, 6.0, 6.0, 8.0, 9.0])),
+            op("f", Vec::new()),
+        ]);
+        let rect = drawn.fills[0].rect;
+        assert_eq!((rect.x0, rect.y0, rect.x1, rect.y1), (0.0, 0.0, 8.0, 9.0));
+
+        // Un tracé abandonné ne laisse rien à remplir.
+        let abandoned =
+            run(vec![op("re", reals(&[0.0, 0.0, 5.0, 5.0])), op("n", Vec::new()), op("f", Vec::new())]);
+        assert!(abandoned.fills.is_empty());
+    }
+
+    #[test]
+    fn applies_the_current_matrix_and_restores_it() {
+        let drawn = run(vec![
+            op("q", Vec::new()),
+            op("cm", reals(&[1.0, 0.0, 0.0, 1.0, 100.0, 0.0])),
+            op("re", reals(&[0.0, 0.0, 10.0, 10.0])),
+            op("f", Vec::new()),
+            op("Q", Vec::new()),
+            op("re", reals(&[0.0, 0.0, 10.0, 10.0])),
+            op("f", Vec::new()),
+            // Un `Q` de trop revient à l'état de départ sans planter.
+            op("Q", Vec::new()),
+        ]);
+        assert_eq!(drawn.fills[0].rect.x0, 100.0);
+        assert_eq!(drawn.fills[1].rect.x0, 0.0);
+    }
+
+    #[test]
+    fn keeps_a_word_written_in_pieces_together() {
+        let drawn = run(vec![
+            op("BT", Vec::new()),
+            op("Tf", reals(&[10.0])),
+            op("Tc", reals(&[0.0])),
+            op("Tm", reals(&[1.0, 0.0, 0.0, 1.0, 50.0, 700.0])),
+            op("Tj", text("Bon")),
+            op("TJ", vec![Object::Array(vec![Object::string_literal("jour")])]),
+            op("ET", Vec::new()),
+        ]);
+        assert_eq!(drawn.texts.len(), 1);
+        assert_eq!(drawn.texts[0].text, "Bonjour");
+        assert_eq!((drawn.texts[0].anchor.x, drawn.texts[0].anchor.y), (50.0, 700.0));
+    }
+
+    #[test]
+    fn moves_to_the_next_line_and_drops_blank_text() {
+        let drawn = run(vec![
+            op("BT", Vec::new()),
+            op("TL", reals(&[12.0])),
+            op("Td", reals(&[10.0, 100.0])),
+            op("Tj", text("un")),
+            op("T*", Vec::new()),
+            op("Tj", text("deux")),
+            op("'", text("trois")),
+            op("\"", text("quatre")),
+            op("TD", reals(&[0.0, -20.0])),
+            op("Tj", text("   ")),
+            op("ET", Vec::new()),
+        ]);
+        let words: Vec<(&str, f64)> = drawn.texts.iter().map(|t| (t.text.as_str(), t.anchor.y)).collect();
+        assert_eq!(words, [("un", 100.0), ("deux", 88.0), ("trois", 76.0), ("quatre", 64.0)]);
+    }
+
+    #[test]
+    fn centers_a_fragment_on_its_measured_end() {
+        let anchor = Point { x: 0.0, y: 0.0 };
+        let fragment = TextFragment { anchor, end: Some(Point { x: 10.0, y: 4.0 }), text: "x".into() };
+        let center = fragment.center();
+        assert_eq!((center.x, center.y), (5.0, 2.0));
+        let unmeasured = TextFragment { anchor: Point { x: 3.0, y: 1.0 }, end: None, text: "x".into() };
+        assert_eq!((unmeasured.center().x, unmeasured.center().y), (3.0, 1.0));
+    }
+
+    #[test]
+    fn converts_cmyk_to_rgb() {
+        assert_eq!(cmyk_to_rgb(0.0, 0.0, 0.0, 0.0), Rgb(255, 255, 255));
+        assert_eq!(cmyk_to_rgb(0.0, 0.0, 0.0, 1.0), Rgb(0, 0, 0));
+        assert_eq!(cmyk_to_rgb(1.0, 0.0, 0.0, 0.0), Rgb(0, 255, 255));
+    }
+
+    /// Un document avec un XObject `Form` prêt à servir, nommé `Fm0`.
+    fn with_form(form_operations: Vec<Operation>, matrix: Option<Vec<Object>>) -> (Document, Dictionary) {
+        let mut document = Document::new();
+        let content = Content { operations: form_operations }.encode().expect("flux encodé");
+        let mut dict = dictionary! { "Type" => "XObject", "Subtype" => "Form" };
+        if let Some(matrix) = matrix {
+            dict.set("Matrix", Object::Array(matrix));
+        }
+        let form = document.add_object(Stream::new(dict, content));
+        let resources = dictionary! { "XObject" => dictionary! { "Fm0" => Object::Reference(form) } };
+        (document, resources)
+    }
+
+    fn draw(document: &Document, resources: &Dictionary, depth: usize) -> Primitives {
+        let mut interpreter = Interpreter::new(document);
+        let operations = vec![op("Do", vec![Object::Name(b"Fm0".to_vec())])];
+        interpreter.run(&Content { operations }, resources, depth);
+        interpreter.finish()
+    }
+
+    #[test]
+    fn draws_a_form_in_its_own_coordinates() {
+        let square = vec![op("re", reals(&[0.0, 0.0, 10.0, 10.0])), op("f", Vec::new())];
+        let matrix = reals(&[1.0, 0.0, 0.0, 1.0, 30.0, 0.0]);
+        let (document, resources) = with_form(square, Some(matrix));
+
+        let drawn = draw(&document, &resources, 0);
+        assert_eq!(drawn.fills.len(), 1);
+        assert_eq!(drawn.fills[0].rect.x0, 30.0);
+    }
+
+    #[test]
+    fn stops_at_the_depth_limit_and_on_unknown_names() {
+        let square = vec![op("re", reals(&[0.0, 0.0, 10.0, 10.0])), op("f", Vec::new())];
+        let (document, resources) = with_form(square, None);
+
+        assert!(draw(&document, &resources, MAX_FORM_DEPTH).fills.is_empty());
+
+        let mut interpreter = Interpreter::new(&document);
+        let unknown = vec![op("Do", vec![Object::Name(b"Autre".to_vec())]), op("Do", Vec::new())];
+        interpreter.run(&Content { operations: unknown }, &resources, 0);
+        assert!(interpreter.finish().fills.is_empty());
+    }
+
+    #[test]
+    fn a_form_that_calls_itself_is_drawn_once() {
+        let mut document = Document::new();
+        let recursive = Content {
+            operations: vec![
+                op("re", reals(&[0.0, 0.0, 1.0, 1.0])),
+                op("f", Vec::new()),
+                op("Do", vec![Object::Name(b"Fm0".to_vec())]),
+            ],
+        };
+        let dict = dictionary! { "Type" => "XObject", "Subtype" => "Form" };
+        let id = document.add_object(Stream::new(dict, recursive.encode().expect("flux encodé")));
+        let resources = dictionary! { "XObject" => dictionary! { "Fm0" => Object::Reference(id) } };
+
+        assert_eq!(draw(&document, &resources, 0).fills.len(), 1);
+    }
+
+    #[test]
+    fn reads_a_matrix_only_when_it_has_six_numbers() {
+        let six = Object::Array(reals(&[1.0, 0.0, 0.0, 1.0, 5.0, 6.0]));
+        assert!(matrix_from_object(&six).is_some());
+        assert!(matrix_from_object(&Object::Array(reals(&[1.0, 2.0]))).is_none());
+        assert!(matrix_from_object(&Object::Integer(3)).is_none());
+    }
+
+    #[test]
+    fn extracts_nothing_from_an_empty_document() {
+        assert!(extract_first_page(&Document::new()).is_err());
+    }
+}

@@ -341,4 +341,228 @@ mod tests {
         assert_eq!(encode("identify guilds.join"), "identify%20guilds.join");
         assert_eq!(encode("https://edt.example/api"), "https%3A%2F%2Fedt.example%2Fapi");
     }
+
+    use wiremock::matchers::{header_exists, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn discord(server: &MockServer, known: &[&str]) -> Discord {
+        Discord::new(DiscordConfig {
+            client_id: "1".into(),
+            client_secret: "secret".into(),
+            bot_token: "jeton".into(),
+            guild_id: "7".into(),
+            known_guild_ids: known.iter().map(|id| (*id).to_owned()).collect(),
+            session_secret: "s".repeat(32),
+            public_key: Some("cle".into()),
+            api_base: server.uri(),
+        })
+        .expect("client Discord")
+    }
+
+    fn json_body(body: &str) -> ResponseTemplate {
+        ResponseTemplate::new(200).set_body_string(body)
+    }
+
+    #[test]
+    fn builds_the_authorization_url_and_the_button_codes() {
+        let discord = discord_offline();
+        let url = discord.authorize_url("https://edt.test/cb", "abc");
+        assert!(url.contains("client_id=1"), "{url}");
+        assert!(url.contains("redirect_uri=https%3A%2F%2Fedt.test%2Fcb"), "{url}");
+        assert!(url.contains("state=abc"), "{url}");
+        assert_eq!(discord.public_key(), Some("cle"));
+
+        assert_eq!(ButtonStyle::Primary.code(), 1);
+        assert_eq!(ButtonStyle::Secondary.code(), 2);
+        assert_eq!(ButtonStyle::Success.code(), 3);
+        let row = action_row(&[Button {
+            id: "hw:done:1".into(),
+            label: "Fait".into(),
+            style: ButtonStyle::Success,
+        }]);
+        assert_eq!(row[0]["custom_id"], "hw:done:1");
+        assert_eq!(row[0]["style"], 3);
+    }
+
+    fn discord_offline() -> Discord {
+        Discord::new(DiscordConfig {
+            client_id: "1".into(),
+            client_secret: "secret".into(),
+            bot_token: "jeton".into(),
+            guild_id: "7".into(),
+            known_guild_ids: Vec::new(),
+            session_secret: "s".repeat(32),
+            public_key: Some("cle".into()),
+            api_base: "http://discord.invalid".into(),
+        })
+        .expect("client Discord")
+    }
+
+    #[tokio::test]
+    async fn signs_a_person_in() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/oauth2/token"))
+            .and(header_exists("authorization"))
+            .respond_with(json_body(r#"{"access_token":"tok"}"#))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/users/@me"))
+            .respond_with(json_body(r#"{"id":"42","username":"ada","global_name":"Ada L.","avatar":null}"#))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/guilds/7/members/42"))
+            .respond_with(ResponseTemplate::new(201))
+            .mount(&server)
+            .await;
+        let discord = discord(&server, &[]);
+
+        let token = discord.exchange_code("code", "https://edt.test/cb").await.expect("jeton");
+        assert_eq!(token, "tok");
+        let user = discord.current_user(&token).await.expect("profil");
+        assert_eq!(user.display_name(), "Ada L.");
+        discord.join_guild(&user.id, &token).await.expect("ajoutée au serveur");
+    }
+
+    #[test]
+    fn falls_back_to_the_username() {
+        let user = DiscordUser { id: "1".into(), username: "ada".into(), global_name: None, avatar: None };
+        assert_eq!(user.display_name(), "ada");
+    }
+
+    #[tokio::test]
+    async fn finds_the_first_known_server_the_person_belongs_to() {
+        let server = MockServer::start().await;
+        // Premier serveur : membre inconnu ; deuxième : le bot n'y est pas ; troisième : trouvée.
+        Mock::given(method("GET"))
+            .and(path("/guilds/10/members/42"))
+            .respond_with(
+                ResponseTemplate::new(404).set_body_string(r#"{"code":10007,"message":"Unknown Member"}"#),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/guilds/20/members/42"))
+            .respond_with(
+                ResponseTemplate::new(403).set_body_string(r#"{"code":50001,"message":"Missing Access"}"#),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/guilds/30/members/42"))
+            .respond_with(json_body("{}"))
+            .mount(&server)
+            .await;
+
+        assert_eq!(discord(&server, &["10", "20", "30"]).known_guild_of("42").await, Some("30"));
+        assert_eq!(discord(&server, &["10", "20"]).known_guild_of("42").await, None);
+    }
+
+    #[tokio::test]
+    async fn sends_a_dm_with_a_file_and_buttons() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/users/@me/channels"))
+            .respond_with(json_body(r#"{"id":"900"}"#))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/channels/900/messages"))
+            .respond_with(json_body("{}"))
+            .expect(2)
+            .mount(&server)
+            .await;
+        let discord = discord(&server, &[]);
+
+        let file = Attachment { filename: "edt.ics".into(), content: b"BEGIN:VCALENDAR".to_vec() };
+        discord.send_dm("42", "Voici", Some(&file)).await.expect("avec fichier");
+        let button = Button { id: "hw:done:1".into(), label: "Fait".into(), style: ButtonStyle::Primary };
+        discord.send_dm_with("42", "Voici", None, vec![button]).await.expect("avec bouton");
+    }
+
+    #[tokio::test]
+    async fn waits_out_a_rate_limit_then_succeeds() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/users/@me/channels"))
+            .respond_with(ResponseTemplate::new(429).set_body_string(r#"{"retry_after":0.01}"#))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/users/@me/channels"))
+            .respond_with(json_body(r#"{"id":"900"}"#))
+            .mount(&server)
+            .await;
+        // Puis la limite tombe sur le message lui-même, sans corps lisible.
+        Mock::given(method("POST"))
+            .and(path("/channels/900/messages"))
+            .respond_with(ResponseTemplate::new(429))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/channels/900/messages"))
+            .respond_with(json_body("{}"))
+            .mount(&server)
+            .await;
+
+        discord(&server, &[]).send_dm("42", "Salut", None).await.expect("réessayé");
+    }
+
+    #[tokio::test]
+    async fn tells_closed_direct_messages_from_other_refusals() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/users/@me/channels"))
+            .respond_with(json_body(r#"{"id":"900"}"#))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/channels/900/messages"))
+            .respond_with(
+                ResponseTemplate::new(403).set_body_string(r#"{"code":50007,"message":"Cannot send"}"#),
+            )
+            .mount(&server)
+            .await;
+        let closed = discord(&server, &[]).send_dm("42", "x", None).await.expect_err("refusé");
+        assert!(closed.is_dm_closed());
+        assert!(closed.to_string().contains("Cannot send"), "{closed}");
+
+        let other = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/users/@me/channels"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&other)
+            .await;
+        let error = discord(&other, &[]).send_dm("42", "x", None).await.expect_err("panne");
+        assert!(!error.is_dm_closed());
+        assert!(error.to_string().contains("Internal Server Error"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn registers_the_slash_commands() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/applications/1/commands"))
+            .respond_with(json_body("[]"))
+            .expect(1)
+            .mount(&server)
+            .await;
+        discord(&server, &[]).register_commands(&json!([{ "name": "devoirs" }])).await.expect("déclarées");
+    }
+
+    #[tokio::test]
+    async fn reports_an_unreadable_answer() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/users/@me"))
+            .respond_with(json_body("pas du json"))
+            .mount(&server)
+            .await;
+        let error = discord(&server, &[]).current_user("tok").await.expect_err("illisible");
+        assert!(matches!(error, DiscordError::Unexpected(_)));
+    }
 }

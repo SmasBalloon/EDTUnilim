@@ -470,4 +470,245 @@ mod tests {
         assert!(messages.iter().all(|m| m.chars().count() <= MESSAGE_LIMIT));
         assert_eq!(messages.iter().map(|m| m.lines().count()).sum::<usize>(), 100);
     }
+
+    // --- Mise en forme -----------------------------------------------------
+
+    fn homework(title: &str) -> Homework {
+        Homework {
+            id: "h1".into(),
+            author: "42".into(),
+            author_name: "Ada".into(),
+            year: 1,
+            audience: crate::homework::Audience::Class { group: Some("G1".into()) },
+            title: title.into(),
+            details: None,
+            resource: Some("R1.05".into()),
+            due: None,
+            course: None,
+            created_at: time::OffsetDateTime::now_utc(),
+            confirmed_by: None,
+            confirmed_name: None,
+            done: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn describes_a_homework_with_its_due_date_and_details() {
+        let mut item = homework("Exercices");
+        assert_eq!(describe_homework(&item), "**R1.05 — Exercices**");
+        item.due = Some(date!(2026 - 09 - 21));
+        item.details = Some("pages 3 à 7".into());
+        let text = describe_homework(&item);
+        assert!(text.contains("pour le 21/09"), "{text}");
+        assert!(text.ends_with("\n> pages 3 à 7"), "{text}");
+        assert_eq!(french_date(date!(2026 - 01 - 05)), "05/01");
+    }
+
+    #[test]
+    fn shortens_a_label_to_fit_on_a_button() {
+        assert_eq!(short_label(&homework("Court")), "Fait : R1.05 — Court");
+        let long = short_label(&homework(&"é".repeat(200)));
+        assert!(long.starts_with("Fait : R1.05"), "{long}");
+        assert!(long.ends_with('…'), "{long}");
+        assert!(long.chars().count() < 90, "{long}");
+    }
+
+    #[test]
+    fn says_what_a_course_is_and_what_changed_in_it() {
+        let mut bare = course(600, "G1A", "104");
+        bare.resource = None;
+        bare.title = Some("Projet".into());
+        bare.groups.clear();
+        bare.room = None;
+        bare.teacher = None;
+        assert_eq!(what(&bare), "TP Projet");
+
+        let before = course(600, "G1A", "104");
+        let mut after = course(600, "G1A", "104");
+        after.kind = CourseKind::Td;
+        after.resource = Some(Resource { code: "R1.06".into(), name: None });
+        after.title = Some("Autre".into());
+        after.teacher = None;
+        let text = what_changed(&before, &after);
+        for expected in ["TP → TD", "matière R1.05 → R1.06", "intitulé — → Autre", "enseignant Dupont M. → —"]
+        {
+            assert!(text.contains(expected), "{expected} manque dans {text}");
+        }
+        for kind in [CourseKind::Amphi, CourseKind::Sae, CourseKind::Controle] {
+            assert!(!kind_label(kind).is_empty());
+        }
+    }
+
+    #[test]
+    fn announces_a_publication_with_the_number_of_courses() {
+        let timetable = week(vec![course(600, "G1A", "104"), course(840, "G2A", "105")]);
+        let text = published_message(&timetable, "g1a");
+        assert!(text.contains("BUT 1 · semaine 3 (14/09 → 19/09) publiée"), "{text}");
+        assert!(text.contains("1 cours pour G1A"), "{text}");
+    }
+
+    // --- Envois ------------------------------------------------------------
+
+    use wiremock::matchers::{body_string_contains, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use crate::config::DiscordConfig;
+
+    struct Bench {
+        server: MockServer,
+        notifier: Notifier,
+        users: Arc<UserStore>,
+        _dir: tempfile::TempDir,
+    }
+
+    /// Un Discord simulé qui accepte tout, et deux abonnés du même demi-groupe.
+    async fn bench() -> Bench {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/users/@me/channels"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"id":"900"}"#))
+            .mount(&server)
+            .await;
+        let discord = Discord::new(DiscordConfig {
+            client_id: "1".into(),
+            client_secret: "secret".into(),
+            bot_token: "jeton".into(),
+            guild_id: "7".into(),
+            known_guild_ids: Vec::new(),
+            session_secret: "s".repeat(32),
+            public_key: None,
+            api_base: server.uri(),
+        })
+        .expect("client Discord");
+
+        let dir = tempfile::tempdir().expect("répertoire temporaire");
+        let users = Arc::new(UserStore::open(dir.path()).await.expect("comptes"));
+        for (id, name) in [("42", "Ada"), ("43", "Bob")] {
+            users.sign_in(id, name, None).await.expect("compte");
+            users
+                .update(id, |user| {
+                    user.year = Some(1);
+                    user.group = Some("G1a".into());
+                })
+                .await
+                .expect("classe");
+        }
+        Bench { notifier: Notifier::new(discord, Arc::clone(&users)), server, users, _dir: dir }
+    }
+
+    async fn messages(bench: &Bench, status: u16, expected: u64) {
+        Mock::given(method("POST"))
+            .and(path("/channels/900/messages"))
+            .respond_with(ResponseTemplate::new(status).set_body_string("{}"))
+            .expect(expected)
+            .mount(&bench.server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn tells_each_subscriber_about_a_new_week() {
+        let bench = bench().await;
+        messages(&bench, 200, 2).await;
+
+        bench.notifier.week_published(&week(vec![course(600, "G1A", "104")])).await;
+        // Un groupe sans cours cette semaine n'est pas dérangé.
+        bench.notifier.week_published(&week(vec![course(600, "G3A", "104")])).await;
+    }
+
+    #[tokio::test]
+    async fn only_tells_the_groups_whose_courses_moved() {
+        let bench = bench().await;
+        messages(&bench, 200, 2).await;
+
+        let before = week(vec![course(600, "G1A", "104")]);
+        bench.notifier.week_changed(&before, &before).await;
+        bench.notifier.week_changed(&before, &week(vec![course(600, "G1A", "208")])).await;
+    }
+
+    #[tokio::test]
+    async fn keeps_going_when_a_message_cannot_be_delivered() {
+        let bench = bench().await;
+        // Messages privés fermés : l'erreur arrête cette personne, pas les autres.
+        messages(&bench, 403, 2).await;
+        bench.notifier.week_published(&week(vec![course(600, "G1A", "104")])).await;
+    }
+
+    #[tokio::test]
+    async fn welcomes_a_person_with_or_without_the_current_week() {
+        let bench = bench().await;
+        messages(&bench, 200, 2).await;
+        let ada = bench.users.get("42").await.expect("compte");
+
+        bench
+            .notifier
+            .welcome(&ada, Some(&week(vec![course(600, "G1A", "104")])))
+            .await
+            .expect("avec semaine");
+        bench.notifier.welcome(&ada, None).await.expect("sans semaine");
+
+        // Sans classe choisie, il n'y a rien à envoyer.
+        let mut classless = ada.clone();
+        classless.year = None;
+        bench.notifier.welcome(&classless, None).await.expect("rien à envoyer");
+    }
+
+    #[tokio::test]
+    async fn asks_the_class_to_confirm_but_not_the_author() {
+        let bench = bench().await;
+        // Bob seul reçoit : Ada a noté le devoir.
+        Mock::given(method("POST"))
+            .and(path("/channels/900/messages"))
+            .and(body_string_contains("hw:confirm:h1"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
+            .expect(1)
+            .mount(&bench.server)
+            .await;
+        bench.notifier.homework_proposed(&homework("Exercices")).await;
+
+        let mut item = homework("Exercices");
+        item.confirmed_name = Some("Bob".into());
+        Mock::given(method("POST"))
+            .and(path("/channels/900/messages"))
+            .and(body_string_contains("hw:done:h1"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
+            .expect(1)
+            .mount(&bench.server)
+            .await;
+        bench.notifier.homework_confirmed(&item).await;
+    }
+
+    #[tokio::test]
+    async fn announces_in_the_background() {
+        let bench = bench().await;
+        messages(&bench, 200, 2).await;
+        bench.notifier.announce_proposed(homework("Exercices"));
+        bench.notifier.announce_confirmed(homework("Exercices"));
+        // Le temps que les deux annonces partent avant la vérification des attentes.
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    }
+
+    #[tokio::test]
+    async fn reminds_what_is_due_tomorrow() {
+        let bench = bench().await;
+        Mock::given(method("POST"))
+            .and(path("/channels/900/messages"))
+            .and(body_string_contains("Pour demain"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
+            .expect(1)
+            .mount(&bench.server)
+            .await;
+        let ada = bench.users.get("42").await.expect("compte");
+        let (one, two) = (homework("Un"), homework("Deux"));
+
+        bench.notifier.homework_due_tomorrow(&ada, &[]).await;
+        bench.notifier.homework_due_tomorrow(&ada, &[&one, &two]).await;
+    }
+
+    #[tokio::test]
+    async fn a_failed_reminder_is_only_logged() {
+        let bench = bench().await;
+        messages(&bench, 500, 1).await;
+        let ada = bench.users.get("42").await.expect("compte");
+        bench.notifier.homework_due_tomorrow(&ada, &[&homework("Un")]).await;
+    }
 }
