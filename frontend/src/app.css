@@ -303,7 +303,10 @@ h2,
   min-height: 0;
   min-width: 0;
   overflow: auto;
-  padding-top: clamp(0.75rem, 3vw, 1.25rem);
+  --timetable-pad: clamp(0.75rem, 3vw, 1.25rem);
+  padding-top: var(--timetable-pad);
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
   /* Le défilement latéral s'arrête proprement sur un jour. */
   scroll-snap-type: x proximity;
   scroll-padding-left: var(--space-edge);
@@ -1297,7 +1300,9 @@ h2,
 .week-grid__corner,
 .week-grid__day {
   position: sticky;
-  top: 0;
+  /* Colle au bord réel de la zone, sans laisser passer le contenu dans son padding. */
+  top: calc(-1 * var(--timetable-pad, 0px));
+  padding-top: var(--timetable-pad, 0px);
   z-index: 20;
   background: var(--color-bg);
   border-bottom: 1px solid var(--color-line);
