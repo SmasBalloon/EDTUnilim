@@ -1,4 +1,4 @@
-²# Variables d'environnement locales
+# Variables d'environnement locales
 .env
 .env.*
 !.env.example
@@ -11,3 +11,6 @@
 # Système
 .DS_Store
 Thumbs.db
+
+# Instructions locales pour Claude Code (à retirer d'ici pour les partager)
+CLAUDE.md

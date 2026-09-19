@@ -272,7 +272,10 @@ mod tests {
 
     #[test]
     fn dates_round_trip_through_iso_8601() {
-        let value = Dated { day: time::macros::date!(2026 - 08 - 31), due: Some(time::macros::date!(2026 - 09 - 04)) };
+        let value = Dated {
+            day: time::macros::date!(2026 - 08 - 31),
+            due: Some(time::macros::date!(2026 - 09 - 04)),
+        };
         let json = serde_json::to_string(&value).expect("sérialisé");
         assert_eq!(json, r#"{"day":"2026-08-31","due":"2026-09-04"}"#);
         assert_eq!(serde_json::from_str::<Dated>(&json).expect("relu"), value);

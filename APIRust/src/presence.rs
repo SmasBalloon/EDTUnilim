@@ -285,7 +285,8 @@ mod tests {
 
     #[tokio::test]
     async fn unreadable_text_is_reported() {
-        let error = next_payload(&mut gateway(vec![Ok(Message::text("pas du json"))])).await.expect_err("illisible");
+        let error =
+            next_payload(&mut gateway(vec![Ok(Message::text("pas du json"))])).await.expect_err("illisible");
         assert!(matches!(error, Error::Unreadable(_)));
     }
 

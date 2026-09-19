@@ -360,7 +360,12 @@ async fn only_the_author_can_edit_and_a_class_note_asks_again() {
 
     // Un intitulé vide est refusé, un devoir inconnu aussi.
     let blank = json!({ "title": "  ", "audience": { "kind": "personal" } });
-    setup.ada.put(&format!("/api/v1/homework/{id}")).json(&blank).await.assert_status(StatusCode::BAD_REQUEST);
+    setup
+        .ada
+        .put(&format!("/api/v1/homework/{id}"))
+        .json(&blank)
+        .await
+        .assert_status(StatusCode::BAD_REQUEST);
     setup.ada.put("/api/v1/homework/inconnu").json(&blank).await.assert_status(StatusCode::NOT_FOUND);
 
     // Un corps illisible est une mauvaise requête, pas une erreur du service.

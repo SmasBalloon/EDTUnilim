@@ -170,7 +170,9 @@ mod tests {
     async fn lists_everyone_to_notify_whatever_the_year() {
         let dir = tempfile::tempdir().expect("répertoire temporaire");
         let store = UserStore::open(dir.path()).await.expect("ouvert");
-        for (id, year, notify) in [("1", Some(1), true), ("2", Some(2), true), ("3", Some(3), false), ("4", None, true)] {
+        for (id, year, notify) in
+            [("1", Some(1), true), ("2", Some(2), true), ("3", Some(3), false), ("4", None, true)]
+        {
             store.sign_in(id, id, None).await.expect("compte");
             store
                 .update(id, |user| {
