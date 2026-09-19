@@ -165,4 +165,60 @@ mod tests {
         assert!(reopened.delete("42").await.expect("suppression"));
         assert!(reopened.get("42").await.is_none());
     }
+
+    #[tokio::test]
+    async fn lists_everyone_to_notify_whatever_the_year() {
+        let dir = tempfile::tempdir().expect("répertoire temporaire");
+        let store = UserStore::open(dir.path()).await.expect("ouvert");
+        for (id, year, notify) in
+            [("1", Some(1), true), ("2", Some(2), true), ("3", Some(3), false), ("4", None, true)]
+        {
+            store.sign_in(id, id, None).await.expect("compte");
+            store
+                .update(id, |user| {
+                    user.year = year;
+                    user.group = year.map(|_| "G1a".to_owned());
+                    user.notify = notify;
+                })
+                .await
+                .expect("écriture");
+        }
+
+        let mut ids: Vec<String> = store.subscribers_all().await.into_iter().map(|user| user.id).collect();
+        ids.sort();
+        assert_eq!(ids, ["1", "2"], "ni les muets, ni ceux sans classe");
+    }
+
+    #[tokio::test]
+    async fn ignores_what_does_not_exist() {
+        let dir = tempfile::tempdir().expect("répertoire temporaire");
+        let store = UserStore::open(dir.path()).await.expect("ouvert");
+        assert!(store.update("absent", |user| user.notify = false).await.expect("rien à écrire").is_none());
+        assert!(!store.delete("absent").await.expect("rien à supprimer"));
+        assert!(store.get("absent").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn refuses_a_corrupt_file() {
+        let dir = tempfile::tempdir().expect("répertoire temporaire");
+        tokio::fs::write(dir.path().join("users.json"), b"{ pas du json").await.expect("écrit");
+        let error = UserStore::open(dir.path()).await.err().expect("refusé");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn a_class_needs_both_year_and_group() {
+        let mut user = User {
+            id: "1".into(),
+            name: "Ada".into(),
+            avatar: None,
+            year: Some(1),
+            group: None,
+            notify: true,
+            created_at: OffsetDateTime::now_utc(),
+        };
+        assert_eq!(user.class(), None);
+        user.group = Some("G1a".into());
+        assert_eq!(user.class(), Some((1, "G1a")));
+    }
 }

@@ -171,4 +171,18 @@ mod tests {
         assert!(folded.split("\r\n").all(|part| part.len() <= 75));
         assert_eq!(folded.replace("\r\n ", ""), line);
     }
+
+    #[test]
+    fn labels_every_kind_of_course() {
+        assert_eq!(kind_label(CourseKind::Amphi), "CM");
+        assert_eq!(kind_label(CourseKind::Td), "TD");
+        assert_eq!(kind_label(CourseKind::Tp), "TP");
+        assert_eq!(kind_label(CourseKind::Sae), "SAÉ");
+        assert_eq!(kind_label(CourseKind::Controle), "Contrôle");
+    }
+
+    #[test]
+    fn escapes_what_ical_reserves() {
+        assert_eq!(escape("a;b,c\\d\ne"), "a\\;b\\,c\\\\d\\ne");
+    }
 }

@@ -217,6 +217,7 @@ Les journaux (`docker compose logs api`) nomment la cause :
 | --- | --- |
 | `présence Discord impossible : le jeton du bot est refusé` (code 4004) | le jeton de `EDT_DISCORD_BOT_TOKEN` n'est plus valide : *Bot* → *Reset Token* dans le portail, puis recopier. Les messages privés sont hors service eux aussi. |
 | `commandes Discord refusées … 401` | même cause : le jeton. |
+| « EDTUnilim n'a pas répondu à temps » dans Discord | Discord abandonne au bout de trois secondes. Tout ce qui est long — prévenir une classe, deux requêtes par personne — part désormais de son côté, après la réponse ; si le message revient, c'est que le service est injoignable ou trop lent à démarrer. |
 | `commandes Discord refusées … 403 Missing Access` | l'application n'a pas le champ `applications.commands` : réinviter le bot avec `scope=bot%20applications.commands`. |
 | `commandes slash éteintes : EDT_DISCORD_PUBLIC_KEY est absente` | renseigner la clé publique de l'application. |
 | rien du tout au démarrage | la configuration Discord est incomplète : c'est tout ou rien (voir plus bas). |

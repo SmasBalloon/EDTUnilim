@@ -336,6 +336,22 @@ impl Notifier {
         self.to_class(item, &text, buttons).await;
     }
 
+    /// Les mêmes annonces, mais sans faire attendre celui qui a cliqué.
+    ///
+    /// Prévenir une classe, c'est deux requêtes à Discord par personne — bien
+    /// plus que les trois secondes qu'il accorde pour répondre à un bouton ou
+    /// à une commande. L'annonce part donc de son côté : ce qui compte est
+    /// déjà enregistré, la réponse n'a pas à l'attendre.
+    pub fn announce_proposed(&self, item: Homework) {
+        let notifier = self.clone();
+        tokio::spawn(async move { notifier.homework_proposed(&item).await });
+    }
+
+    pub fn announce_confirmed(&self, item: Homework) {
+        let notifier = self.clone();
+        tokio::spawn(async move { notifier.homework_confirmed(&item).await });
+    }
+
     /// Rappel de la veille : ce qui est à rendre demain et qui n'est pas fait.
     pub async fn homework_due_tomorrow(&self, user: &User, items: &[&Homework]) {
         if items.is_empty() {

@@ -190,6 +190,18 @@ async fn one_cannot_note_a_homework_for_another_class() {
     refused.assert_status(StatusCode::BAD_REQUEST);
 }
 
+/// Discord met du temps à répondre : les messages privés ne doivent pas pour
+/// autant retarder la réponse à l'interaction.
+async fn discord_dms_are_slow(upstream: &MockServer) {
+    Mock::given(method("POST"))
+        .and(path("/discord/users/@me/channels"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(r#"{"id":"900"}"#).set_delay(Duration::from_secs(5)),
+        )
+        .mount(upstream)
+        .await;
+}
+
 /// Signe une requête comme Discord le fait : horodatage puis corps.
 fn signed(server: &TestServer, body: &Value) -> axum_test::TestRequest {
     let key = SigningKey::from_bytes(&KEY_SEED);
@@ -225,6 +237,40 @@ async fn discord_interactions_must_be_signed() {
 
     // Sans signature du tout non plus.
     setup.ada.post("/api/v1/discord/interactions").json(&ping).await.assert_status(StatusCode::UNAUTHORIZED);
+}
+
+/// Discord abandonne au bout de trois secondes : « l'application n'a pas
+/// répondu à temps ». Prévenir une classe demande deux requêtes par personne,
+/// donc l'annonce doit partir de son côté, sans retenir la réponse.
+#[tokio::test]
+async fn an_interaction_answers_without_waiting_for_discord() {
+    let upstream = MockServer::start().await;
+    discord_dms_are_slow(&upstream).await;
+    let setup = setup(&upstream).await;
+
+    let add = json!({
+        "type": 2,
+        "user": { "id": "42" },
+        "data": {
+            "name": "devoir",
+            "options": [{
+                "name": "ajouter",
+                "type": 1,
+                "options": [
+                    { "name": "intitule", "value": "Exercices 3 à 7" },
+                    { "name": "portee", "value": "group" },
+                ],
+            }],
+        },
+    });
+
+    let answered = tokio::time::timeout(Duration::from_secs(1), signed(&setup.ada, &add)).await;
+    let answer: Value = answered.expect("réponse rendue sans attendre Discord").json();
+    assert!(answer["data"]["content"].as_str().expect("réponse").contains("Noté"));
+
+    // Et le devoir est bien enregistré, lui, avant que la réponse parte.
+    let list: Value = setup.bob.get("/api/v1/homework").await.json();
+    assert_eq!(list.as_array().expect("liste").len(), 1);
 }
 
 #[tokio::test]
@@ -287,4 +333,46 @@ async fn the_bot_notes_and_lists_homework() {
     assert_eq!(bob_sees[0]["done_by_me"], true);
     let ada_sees: Value = setup.ada.get("/api/v1/homework").await.json();
     assert_eq!(ada_sees[0]["done_by_me"], false);
+}
+
+#[tokio::test]
+async fn only_the_author_can_edit_and_a_class_note_asks_again() {
+    let upstream = MockServer::start().await;
+    discord_accepts_dms(&upstream).await;
+    let setup = setup(&upstream).await;
+
+    // Un devoir personnel, que son ouverture à la classe remet en attente.
+    let personal = json!({ "title": "Relire", "audience": { "kind": "personal" } });
+    let created: Value = setup.ada.post("/api/v1/homework").json(&personal).await.json();
+    let id = created["id"].as_str().expect("identifiant").to_owned();
+    assert_eq!(created["pending"], false);
+
+    // Bob ne voit pas ce devoir et ne peut donc pas le corriger.
+    let stranger = setup.bob.put(&format!("/api/v1/homework/{id}")).json(&class_homework()).await;
+    assert!(stranger.status_code().is_client_error());
+
+    let edited = setup.ada.put(&format!("/api/v1/homework/{id}")).json(&class_homework()).await;
+    edited.assert_status_ok();
+    let item: Value = edited.json();
+    assert_eq!(item["title"], "Exercices 3 à 7");
+    assert_eq!(item["resource"], "R1.05");
+    assert_eq!(item["pending"], true, "ouvert à la classe, il attend une confirmation");
+
+    // Un intitulé vide est refusé, un devoir inconnu aussi.
+    let blank = json!({ "title": "  ", "audience": { "kind": "personal" } });
+    setup
+        .ada
+        .put(&format!("/api/v1/homework/{id}"))
+        .json(&blank)
+        .await
+        .assert_status(StatusCode::BAD_REQUEST);
+    setup.ada.put("/api/v1/homework/inconnu").json(&blank).await.assert_status(StatusCode::NOT_FOUND);
+
+    // Un corps illisible est une mauvaise requête, pas une erreur du service.
+    setup
+        .ada
+        .put(&format!("/api/v1/homework/{id}"))
+        .json(&json!({ "audience": 3 }))
+        .await
+        .assert_status(StatusCode::BAD_REQUEST);
 }

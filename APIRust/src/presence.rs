@@ -226,6 +226,70 @@ mod tests {
         assert_eq!(payload["d"]["presence"]["activities"][0]["name"], "les emplois du temps");
     }
 
+    #[test]
+    fn presence_watches_and_stays_online() {
+        let payload = presence("les cours".into());
+        assert_eq!(payload["status"], "online");
+        assert_eq!(payload["afk"], false);
+        assert!(payload["since"].is_null());
+        assert_eq!(payload["activities"][0]["name"], "les cours");
+    }
+
+    #[test]
+    fn explains_each_closing_code_in_plain_words() {
+        assert!(explain(4004).contains("EDT_DISCORD_BOT_TOKEN"));
+        assert!(explain(4013).contains("intentions"));
+        assert!(explain(4014).contains("intentions"));
+        assert!(explain(4011).contains("identification"));
+        assert_eq!(explain(1000), "présence Discord impossible");
+    }
+
+    /// Une passerelle simulée : les messages qu'elle enverrait, dans l'ordre.
+    fn gateway(
+        messages: Vec<Result<Message, tokio_tungstenite::tungstenite::Error>>,
+    ) -> impl StreamExt<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin {
+        futures_util::stream::iter(messages)
+    }
+
+    fn close(code: u16, reason: &str) -> Message {
+        use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+        use tokio_tungstenite::tungstenite::protocol::CloseFrame;
+        Message::Close(Some(CloseFrame { code: CloseCode::from(code), reason: reason.into() }))
+    }
+
+    #[tokio::test]
+    async fn reads_the_next_json_message_and_skips_service_frames() {
+        let mut socket = gateway(vec![
+            Ok(Message::Ping(Vec::new().into())),
+            Ok(Message::text(r#"{"op":10,"d":{"heartbeat_interval":41250}}"#)),
+        ]);
+        let payload = next_payload(&mut socket).await.expect("lu").expect("un message");
+        assert_eq!(payload["op"], 10);
+        assert_eq!(payload["d"]["heartbeat_interval"], 41250);
+    }
+
+    #[tokio::test]
+    async fn a_silent_end_is_not_an_error() {
+        assert!(next_payload(&mut gateway(Vec::new())).await.expect("fin propre").is_none());
+        // Une fermeture ordinaire non plus : on se reconnecte.
+        assert!(next_payload(&mut gateway(vec![Ok(close(1000, "bye"))])).await.expect("fermé").is_none());
+        assert!(next_payload(&mut gateway(vec![Ok(Message::Close(None))])).await.expect("fermé").is_none());
+    }
+
+    #[tokio::test]
+    async fn a_refusal_is_final() {
+        let error = next_payload(&mut gateway(vec![Ok(close(4004, "jeton"))])).await.expect_err("refus");
+        assert!(matches!(error, Error::Rejected { code: 4004, .. }));
+        assert!(error.to_string().contains("4004"));
+    }
+
+    #[tokio::test]
+    async fn unreadable_text_is_reported() {
+        let error =
+            next_payload(&mut gateway(vec![Ok(Message::text("pas du json"))])).await.expect_err("illisible");
+        assert!(matches!(error, Error::Unreadable(_)));
+    }
+
     #[tokio::test]
     async fn counts_the_homework_still_standing() {
         use crate::homework::{Audience, NewHomework};

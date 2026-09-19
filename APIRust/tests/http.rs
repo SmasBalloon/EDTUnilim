@@ -144,3 +144,65 @@ async fn lists_available_weeks_for_a_year() {
     response.assert_status_ok();
     response.assert_json_contains(&serde_json::json!({ "year": 1, "weeks": [3] }));
 }
+
+#[tokio::test]
+async fn lists_the_known_teachers() {
+    let response = server().get("/api/v1/teachers").await;
+
+    response.assert_status_ok();
+    let teachers: serde_json::Value = response.json();
+    assert!(teachers.as_array().is_some_and(|list| !list.is_empty()));
+    assert!(teachers[0]["id"].is_string());
+}
+
+#[tokio::test]
+async fn lists_the_weeks_of_every_year() {
+    let upstream = MockServer::start().await;
+    for (year, week) in [("A1", 3), ("A2", 4), ("A3", 5)] {
+        Mock::given(method("GET"))
+            .and(path(format!("/{year}/")))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(format!(r#"<a href="{year}_S{week}.pdf">x</a>"#)),
+            )
+            .mount(&upstream)
+            .await;
+    }
+
+    let response = server_with(&upstream).get("/api/v1/years").await;
+
+    response.assert_status_ok();
+    response.assert_json(&serde_json::json!([
+        { "year": 1, "weeks": [3] },
+        { "year": 2, "weeks": [4] },
+        { "year": 3, "weeks": [5] },
+    ]));
+}
+
+#[tokio::test]
+async fn an_explicit_reload_asks_the_department_again() {
+    let upstream = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/A1/"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(r#"<a href="A1_S3.pdf">x</a>"#))
+        .expect(2)
+        .mount(&upstream)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A1_S3))
+        .mount(&upstream)
+        .await;
+    let server = server_with(&upstream);
+
+    // Le premier appel remplit le cache, le second force la relecture.
+    server.get("/api/v1/years/1/weeks").await.assert_status_ok();
+    let response = server.get("/api/v1/years/1/weeks").add_header("cache-control", "no-cache").await;
+    response.assert_status_ok();
+    response.assert_json_contains(&serde_json::json!({ "weeks": [3] }));
+
+    // Idem pour une semaine : la relecture passe, la réponse reste valide.
+    server.get("/api/v1/years/1/weeks/3").await.assert_status_ok();
+    let response = server.get("/api/v1/years/1/weeks/3").add_header("cache-control", "max-age=0").await;
+    response.assert_status_ok();
+    response.assert_json_contains(&serde_json::json!({ "week": 3 }));
+}

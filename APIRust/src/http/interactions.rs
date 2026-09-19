@@ -319,7 +319,7 @@ async fn add_command(state: &Arc<AppState>, user: &User, data: &Value) -> Value 
         Ok(item) => {
             info!(id = item.id, author = user.id, "devoir noté depuis Discord");
             if !personal {
-                account.notifier.homework_proposed(&item).await;
+                account.notifier.announce_proposed(item.clone());
                 reply(&format!(
                     "📝 Noté {} : {}\nLa classe est prévenue ; il apparaîtra chez tout le monde dès que quelqu'un l'aura confirmé.",
                     item.audience.label(item.year),
@@ -379,7 +379,7 @@ async fn button(state: &Arc<AppState>, interaction: &Interaction) -> Value {
             match confirmed {
                 Ok(Some(item)) => {
                     info!(id = item.id, by = user.id, "devoir confirmé depuis Discord");
-                    account.notifier.homework_confirmed(&item).await;
+                    account.notifier.announce_confirmed(item.clone());
                     reply(&format!("✅ Confirmé : {}. La classe est prévenue.", item.summary()))
                 }
                 _ => reply("Je n'ai pas réussi à le confirmer."),
@@ -489,6 +489,38 @@ mod tests {
         // La veille reste acceptée : on note parfois un devoir en retard.
         assert_eq!(parse_due("17/09", today), Some(date!(2026 - 09 - 17)));
         assert_eq!(parse_due("demain", today), None);
+    }
+
+    #[test]
+    fn declares_both_commands_with_their_options() {
+        let declared = commands();
+        let names: Vec<&str> =
+            declared.as_array().expect("liste").iter().filter_map(|c| c["name"].as_str()).collect();
+        assert_eq!(names, ["devoirs", "devoir"]);
+
+        let list = &declared[0];
+        assert_eq!(list["options"][1]["choices"].as_array().map(Vec::len), Some(3));
+        let add = &declared[1]["options"][0];
+        assert_eq!(add["name"], "ajouter");
+        assert_eq!(add["options"][0]["required"], true, "l'intitulé est obligatoire");
+        let scopes: Vec<&str> = add["options"][3]["choices"]
+            .as_array()
+            .expect("portées")
+            .iter()
+            .filter_map(|choice| choice["value"].as_str())
+            .collect();
+        assert_eq!(scopes, ["personal", "half", "group", "year"]);
+    }
+
+    #[test]
+    fn finds_the_author_in_a_server_or_in_a_dm() {
+        let in_server: Interaction =
+            serde_json::from_value(json!({ "type": 2, "member": { "user": { "id": "7" } } }))
+                .expect("serveur");
+        assert_eq!(in_server.author(), Some("7"));
+        let in_dm: Interaction =
+            serde_json::from_value(json!({ "type": 2, "user": { "id": "8" } })).expect("message privé");
+        assert_eq!(in_dm.author(), Some("8"));
     }
 
     #[test]
