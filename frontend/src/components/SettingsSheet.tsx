@@ -1,7 +1,14 @@
 import { For, type Component } from 'solid-js';
 import { X } from 'lucide-solid';
 
-import { ACCENTS, dark, settings, update, type Theme, type ViewMode } from '../lib/settings';
+import {
+  DEFAULT_ACCENT,
+  settings,
+  toAccent,
+  update,
+  type Theme,
+  type ViewMode,
+} from '../lib/settings';
 import { GroupPicker } from './GroupPicker';
 import { Sheet } from './Sheet';
 
@@ -26,6 +33,9 @@ const THEMES: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Clair' },
   { value: 'dark', label: 'Sombre' },
 ];
+
+/** La couleur retenue, ramenée à une forme que les champs savent afficher. */
+const accent = () => toAccent(settings().accent) ?? DEFAULT_ACCENT;
 
 export const SettingsSheet: Component<Props> = (props) => (
   <Sheet open={props.open} onClose={props.onClose} label="Réglages">
@@ -75,20 +85,45 @@ export const SettingsSheet: Component<Props> = (props) => (
 
     <section class="field">
       <h3 class="field__label">Couleur</h3>
-      <div class="field__row">
-        <For each={ACCENTS}>
-          {(accent) => (
-            <button
-              type="button"
-              class="swatch"
-              style={{ '--swatch': dark() ? accent.dark : accent.light }}
-              aria-pressed={settings().accent === accent.value}
-              aria-label={accent.label}
-              title={accent.label}
-              onClick={() => update({ accent: accent.value })}
-            />
-          )}
-        </For>
+      <div class="field__row picker-color">
+        {/*
+          * La pastille est le sélecteur lui-même : l'`input` couvre le disque
+          * sans se voir, pour que le doigt ouvre la palette du système là où
+          * la couleur se montre.
+          */}
+        <span class="picker-color__dot" style={{ '--swatch': accent() }}>
+          <input
+            type="color"
+            class="picker-color__input"
+            aria-label="Couleur d'accent"
+            value={accent()}
+            onInput={(event) => update({ accent: event.currentTarget.value })}
+          />
+        </span>
+        <input
+          type="text"
+          class="picker-color__hex"
+          inputMode="text"
+          spellcheck={false}
+          maxLength={7}
+          aria-label="Couleur d'accent en hexadécimal"
+          value={accent()}
+          onInput={(event) => {
+            const hex = toAccent(event.currentTarget.value);
+            if (hex) update({ accent: hex });
+          }}
+          onBlur={(event) => {
+            event.currentTarget.value = accent();
+          }}
+        />
+        <button
+          type="button"
+          class="chip"
+          disabled={accent() === DEFAULT_ACCENT}
+          onClick={() => update({ accent: DEFAULT_ACCENT })}
+        >
+          Rouge d'origine
+        </button>
       </div>
     </section>
 

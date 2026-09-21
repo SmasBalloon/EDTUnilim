@@ -770,27 +770,54 @@ h2,
 }
 
 /*
- * Pastille de couleur : la teinte se montre, elle ne se décrit pas. Celle qui
- * est retenue s'entoure d'un anneau posé à distance du disque, pour qu'il se
- * lise aussi bien sur un fond clair que sombre.
+ * Choix de la couleur d'accent : une pastille qui ouvre la palette du système,
+ * la valeur en clair à côté pour qui sait ce qu'il veut, et le retour au rouge
+ * d'origine.
  */
-.swatch {
-  width: 1.75rem;
-  height: 1.75rem;
-  padding: 0;
-  border: 1px solid rgb(0 0 0 / 0.12);
+.picker-color {
+  align-items: center;
+}
+
+.picker-color__dot {
+  position: relative;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--color-line);
   border-radius: 999px;
   background: var(--swatch);
+  box-shadow: inset 0 0 0 2px var(--color-surface);
+  overflow: hidden;
+}
+
+/* Le champ natif couvre la pastille sans se montrer : c'est elle qu'on voit,
+   c'est lui qu'on touche. */
+.picker-color__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  opacity: 0;
   cursor: pointer;
-  transition: box-shadow var(--press) var(--ease-out), transform var(--press) var(--ease-out);
 }
 
-.swatch:active {
-  transform: scale(0.94);
+.picker-color__hex {
+  width: 6.5rem;
+  padding: 0.3rem 0.625rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  text-transform: lowercase;
 }
 
-.swatch[aria-pressed="true"] {
-  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--swatch);
+.picker-color__hex:focus-visible {
+  border-color: var(--color-accent);
 }
 
 /* Option en pleine largeur, avec son explication. */

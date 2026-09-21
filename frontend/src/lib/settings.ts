@@ -6,34 +6,25 @@ import { toHalf } from './groups';
 
 export type ViewMode = 'grid' | 'list';
 export type Theme = 'system' | 'light' | 'dark';
-export type Accent = (typeof ACCENTS)[number]['value'];
+/** Couleur d'accent, libre, écrite en hexadécimal : `#e5303a`. */
+export type Accent = string;
 
-/**
- * Couleurs proposées pour le bandeau et tout ce qui porte l'accent. Chaque
- * teinte est donnée deux fois : posée sur un fond clair elle doit être assez
- * sombre pour porter du blanc, sur un fond sombre assez vive pour se détacher.
- */
-export const ACCENTS = [
-  { value: 'rouge', label: 'Rouge', light: '#e5303a', dark: '#ff4b4b' },
-  { value: 'orange', label: 'Orange', light: '#d1670f', dark: '#ff9f52' },
-  { value: 'ambre', label: 'Ambre', light: '#a8730a', dark: '#ffd75e' },
-  { value: 'vert', label: 'Vert', light: '#14804a', dark: '#3fce87' },
-  { value: 'turquoise', label: 'Turquoise', light: '#0d7d84', dark: '#3ed2d2' },
-  { value: 'bleu', label: 'Bleu', light: '#2563c9', dark: '#6fb0ff' },
-  { value: 'violet', label: 'Violet', light: '#6d3fd4', dark: '#b39bff' },
-  { value: 'rose', label: 'Rose', light: '#c81e78', dark: '#ff7ab8' },
-] as const;
+/** Le rouge d'origine, celui du département. */
+export const DEFAULT_ACCENT = '#e5303a';
 
-const DEFAULT_ACCENT: Accent = 'rouge';
-
-function accentOf(value: Accent): (typeof ACCENTS)[number] {
-  return ACCENTS.find((accent) => accent.value === value) ?? ACCENTS[0];
+/** Ramène une saisie à un `#rrggbb` minuscule, ou `null` si ce n'en est pas une. */
+export function toAccent(value: string): Accent | null {
+  const hex = value.trim().replace(/^#?/, '#').toLowerCase();
+  if (/^#[0-9a-f]{3}$/.test(hex)) {
+    return `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+  }
+  return /^#[0-9a-f]{6}$/.test(hex) ? hex : null;
 }
 
 /**
  * Noir ou blanc sur la couleur donnée, selon celle des deux qui s'y lit le
- * mieux : une ambre claire réclame de l'encre sombre là où un bleu profond
- * veut du blanc. Luminance relative de sRGB, seuil à mi-chemin.
+ * mieux : un jaune pâle réclame de l'encre sombre là où un bleu profond veut
+ * du blanc. Luminance relative de sRGB, seuil à mi-chemin.
  */
 function inkOn(hex: string): string {
   const channel = (from: number) => {
@@ -97,9 +88,6 @@ function load(): Settings {
 
 const [settings, setSettings] = createSignal<Settings>(load());
 
-/** Vrai quand l'application est en sombre, thème système compris. */
-const [dark, setDark] = createSignal(false);
-
 createEffect(() => {
   try {
     localStorage.setItem(KEY, JSON.stringify(settings()));
@@ -115,13 +103,11 @@ export function watchTheme(): void {
   const apply = () => {
     const theme = settings().theme;
     const isDark = theme === 'dark' || (theme === 'system' && media.matches);
-    setDark(isDark);
     const root = document.documentElement;
     root.classList.toggle('dark', isDark);
     // Posé en style direct sur <html>, l'accent choisi l'emporte sur les
     // jetons de la feuille de style, thème clair comme sombre.
-    const accent = accentOf(settings().accent);
-    const color = isDark ? accent.dark : accent.light;
+    const color = toAccent(settings().accent) ?? DEFAULT_ACCENT;
     root.style.setProperty('--color-accent', color);
     root.style.setProperty('--color-on-accent', inkOn(color));
     document
@@ -136,4 +122,4 @@ export function update(patch: Partial<Settings>): void {
   setSettings((current) => ({ ...current, ...patch }));
 }
 
-export { dark, settings };
+export { settings };
