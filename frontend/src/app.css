@@ -769,6 +769,30 @@ h2,
   font-weight: 600;
 }
 
+/*
+ * Pastille de couleur : la teinte se montre, elle ne se décrit pas. Celle qui
+ * est retenue s'entoure d'un anneau posé à distance du disque, pour qu'il se
+ * lise aussi bien sur un fond clair que sombre.
+ */
+.swatch {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 0.12);
+  border-radius: 999px;
+  background: var(--swatch);
+  cursor: pointer;
+  transition: box-shadow var(--press) var(--ease-out), transform var(--press) var(--ease-out);
+}
+
+.swatch:active {
+  transform: scale(0.94);
+}
+
+.swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--swatch);
+}
+
 /* Option en pleine largeur, avec son explication. */
 .option {
   display: block;

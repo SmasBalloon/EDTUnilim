@@ -1,7 +1,7 @@
 import { For, type Component } from 'solid-js';
 import { X } from 'lucide-solid';
 
-import { settings, update, type Theme, type ViewMode } from '../lib/settings';
+import { ACCENTS, dark, settings, update, type Theme, type ViewMode } from '../lib/settings';
 import { GroupPicker } from './GroupPicker';
 import { Sheet } from './Sheet';
 
@@ -68,6 +68,25 @@ export const SettingsSheet: Component<Props> = (props) => (
             >
               {theme.label}
             </button>
+          )}
+        </For>
+      </div>
+    </section>
+
+    <section class="field">
+      <h3 class="field__label">Couleur</h3>
+      <div class="field__row">
+        <For each={ACCENTS}>
+          {(accent) => (
+            <button
+              type="button"
+              class="swatch"
+              style={{ '--swatch': dark() ? accent.dark : accent.light }}
+              aria-pressed={settings().accent === accent.value}
+              aria-label={accent.label}
+              title={accent.label}
+              onClick={() => update({ accent: accent.value })}
+            />
           )}
         </For>
       </div>
