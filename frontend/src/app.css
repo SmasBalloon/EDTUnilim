@@ -1436,7 +1436,8 @@ h2,
   left: 0;
   right: 0;
   height: 1px;
-  z-index: 20;
+  /* Sous le bandeau des jours (z-index: 20), pour ne pas passer dessus au scroll. */
+  z-index: 5;
   background: var(--color-accent);
   pointer-events: none;
 }
@@ -1741,7 +1742,9 @@ h2,
 .room-planning__corner,
 .room-planning__axis {
   position: sticky;
-  top: 0;
+  /* Colle au bord réel de la zone, sans laisser passer le contenu dans son padding. */
+  top: calc(-1 * var(--timetable-pad, 0px));
+  padding-top: var(--timetable-pad, 0px);
   z-index: 20;
   height: 1.75rem;
   background: var(--color-bg);
@@ -1751,10 +1754,6 @@ h2,
 .room-planning__corner {
   left: 0;
   z-index: 30;
-}
-
-.room-planning__axis {
-  position: sticky;
 }
 
 .room-planning__hour {
@@ -2145,9 +2144,10 @@ h2,
 
 .compare-grid__head {
   position: sticky;
-  top: 0;
+  /* Colle au bord réel de la zone, sans laisser passer le contenu dans son padding. */
+  top: calc(-1 * var(--timetable-pad, 0px));
   z-index: 20;
-  padding: 0.5rem 0 0;
+  padding: calc(var(--timetable-pad, 0px) + 0.5rem) 0 0;
   background: var(--color-bg);
   border-bottom: 1px solid var(--color-line);
   text-align: center;

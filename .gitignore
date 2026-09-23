@@ -14,3 +14,4 @@ Thumbs.db
 
 # Instructions locales pour Claude Code (à retirer d'ici pour les partager)
 CLAUDE.md
+.claude/launch.json
