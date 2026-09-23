@@ -6,7 +6,7 @@ import {
   createSignal,
   type Component,
 } from 'solid-js';
-import { ChevronDown, Search, X } from 'lucide-solid';
+import { ChevronDown, Search } from 'lucide-solid';
 
 import {
   fetchTeachers,
@@ -19,7 +19,25 @@ import {
 import { groupLabel, weekDays } from '../lib/groups';
 import { settings, update } from '../lib/settings';
 import { humanDuration, periodLabel } from '../lib/time';
-import { Sheet } from './Sheet';
+import {
+  card,
+  centered,
+  chip,
+  field,
+  fieldLabel,
+  fieldRow,
+  fieldStack,
+  note,
+  option,
+  optionHint,
+  optionTitle,
+  page,
+  pick,
+  pickName,
+  pill,
+  summary,
+} from '../lib/ui';
+import { Sheet, SheetHeader } from './Sheet';
 import { WeekBar } from './WeekBar';
 import { WeekView } from './WeekView';
 
@@ -117,20 +135,21 @@ export const TeachersPage: Component<Props> = (props) => {
   };
 
   return (
-    <div class="teachers">
-      <div class="summary">
-        <div class="card teachers__head">
+    <div class={page}>
+      <div class={summary}>
+        <div class={`${card} flex items-center gap-2 p-2`}>
+          {/* Le nom ne s'étire pas sur toute la carte : il garde la taille d'un bouton. */}
           <button
             type="button"
-            class="compare__pick"
+            class={`${pick} min-w-48 flex-initial justify-between gap-3`}
             onClick={() => setPicking(true)}
             aria-label="Choisir un enseignant"
           >
-            <span class="compare__pick-name">{name() ?? 'Choisir un enseignant'}</span>
+            <span class={pickName}>{name() ?? 'Choisir un enseignant'}</span>
             <ChevronDown size={16} aria-hidden="true" />
           </button>
           <Show when={chosen() && mine().length > 0}>
-            <span class="week-summary__workload">
+            <span class={pill}>
               {`${mine().length} cours · ${humanDuration(workload())}`}
             </span>
           </Show>
@@ -145,11 +164,11 @@ export const TeachersPage: Component<Props> = (props) => {
         />
       </div>
 
-      <main class="app__timetable">
+      <main class="timetable">
         <Show
           when={chosen() !== null}
           fallback={
-            <div class="centered">
+            <div class={centered}>
               <p>Choisis un enseignant pour voir sa semaine, les trois années réunies.</p>
             </div>
           }
@@ -157,7 +176,7 @@ export const TeachersPage: Component<Props> = (props) => {
           <Show
             when={mine().length > 0 ? week() : null}
             fallback={
-              <div class="centered">
+              <div class={centered}>
                 <p>
                   {props.week === null || weeks.loading
                     ? 'Chargement de la semaine…'
@@ -217,17 +236,13 @@ const Picker: Component<PickerProps> = (props) => {
 
   return (
     <Sheet open={props.open} onClose={props.onClose} label="Choisir un enseignant">
-      <header class="sheet__header">
-        <h2 class="sheet__title">Enseignants</h2>
-        <button type="button" class="button" onClick={props.onClose} aria-label="Fermer">
-          <X size={16} aria-hidden="true" />
-        </button>
-      </header>
+      <SheetHeader title="Enseignants" onClose={props.onClose} />
 
-      <label class="teachers__search">
+      {/* Le champ de recherche tient la poignée de la feuille : il précède la liste. */}
+      <label class="mb-4 flex items-center gap-2 rounded-control border border-line bg-elevated px-2.5 text-muted">
         <Search size={16} aria-hidden="true" />
         <input
-          class="input"
+          class="min-h-[2.125rem] min-w-0 flex-1 py-1 text-sm text-text outline-none pointer-coarse:min-h-10"
           type="search"
           placeholder="Chercher un nom"
           value={query()}
@@ -235,20 +250,20 @@ const Picker: Component<PickerProps> = (props) => {
         />
       </label>
 
-      <section class="field">
-        <h3 class="field__label">Cette semaine</h3>
-        <Show when={named().length > 0} fallback={<p class="setup__note">Personne à ce nom.</p>}>
-          <div class="field__stack">
+      <section class={field}>
+        <h3 class={fieldLabel}>Cette semaine</h3>
+        <Show when={named().length > 0} fallback={<p class={note}>Personne à ce nom.</p>}>
+          <div class={fieldStack}>
             <For each={named()}>
               {(teacher) => (
                 <button
                   type="button"
-                  class="option teachers__option"
+                  class={`${option} flex items-baseline justify-between gap-3`}
                   aria-pressed={props.chosen === teacher.id}
                   onClick={() => props.onChoose(teacher.id)}
                 >
-                  <span class="option__title">{teacher.name}</span>
-                  <span class="option__hint">{`${teacher.count} cours`}</span>
+                  <span class={optionTitle}>{teacher.name}</span>
+                  <span class={optionHint}>{`${teacher.count} cours`}</span>
                 </button>
               )}
             </For>
@@ -259,14 +274,14 @@ const Picker: Component<PickerProps> = (props) => {
       {/* Ces écritures-là n'ont pas encore de nom au référentiel de l'API :
           les montrer, c'est dire ce qu'il reste à y ajouter. */}
       <Show when={unnamed().length > 0}>
-        <section class="field">
-          <h3 class="field__label">Écritures sans nom</h3>
-          <div class="field__row">
+        <section class={field}>
+          <h3 class={fieldLabel}>Écritures sans nom</h3>
+          <div class={fieldRow}>
             <For each={unnamed()}>
               {(teacher) => (
                 <button
                   type="button"
-                  class="chip"
+                  class={chip}
                   aria-pressed={props.chosen === teacher.id}
                   onClick={() => props.onChoose(teacher.id)}
                 >

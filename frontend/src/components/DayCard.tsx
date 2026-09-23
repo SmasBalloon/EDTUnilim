@@ -5,6 +5,7 @@ import type { Course } from '../lib/api';
 import { KIND_LABEL } from '../lib/layout';
 import { homework, onCourse } from '../lib/homework';
 import { clock, humanDuration, isRunning, nowMinutes, relativeDayLabel, toMinutes, todayIso } from '../lib/time';
+import { badge, card, cx, pressLarge } from '../lib/ui';
 
 interface Props {
   date: string;
@@ -54,12 +55,16 @@ export const DayCard: Component<Props> = (props) => {
 
   return (
     <>
-      <div class="card day-card" classList={{ 'day-card--today': isToday() }}>
-        <div class="day-card__label">
-          <span class="badge badge--accent">{relativeDayLabel(props.date, clock())}</span>
+      <div class={cx(card, 'relative mt-3 py-5', isToday() && 'border-accent!')}>
+        {/* L'étiquette du jour est posée à cheval sur le bord supérieur. */}
+        <div class="absolute inset-x-0 -top-3.5 flex justify-center">
+          <span class={badge.accent}>{relativeDayLabel(props.date, clock())}</span>
         </div>
 
-        <Show when={props.courses.length > 0} fallback={<p class="day-card__empty">Rien ce jour-là.</p>}>
+        <Show
+          when={props.courses.length > 0}
+          fallback={<p class="px-4 py-2 text-center text-[0.8125rem] text-muted">Rien ce jour-là.</p>}
+        >
           <For each={rows()}>
             {(row) => (
               <Show when={row.kind === 'course' ? row.course : null} fallback={<Marker row={row} />}>
@@ -78,7 +83,7 @@ export const DayCard: Component<Props> = (props) => {
       </div>
 
       <Show when={props.courses.length > 0}>
-        <p class="day-card__total">{`${props.courses.length} cours · ${humanDuration(total())}`}</p>
+        <p class="pt-2 text-center text-2xs text-muted">{`${props.courses.length} cours · ${humanDuration(total())}`}</p>
       </Show>
     </>
   );
@@ -89,13 +94,18 @@ const Marker: Component<{ row: Row }> = (props) => (
   <Show
     when={props.row.kind === 'time' ? props.row.at : null}
     fallback={
-      <p class="gap-note">
+      <p class="flex items-center justify-center gap-2 p-3 text-[0.8125rem] text-muted">
         <Hourglass size={14} aria-hidden="true" />
         {props.row.kind === 'gap' ? `${humanDuration(props.row.minutes)} de vide` : ''}
       </p>
     }
   >
-    {(at) => <p class="time-rule">{at()}</p>}
+    {/* Heure de début, prolongée par un filet jusqu'au bord de la carte. */}
+    {(at) => (
+      <p class="flex items-center gap-3 px-3.5 py-2 text-[0.8125rem] text-muted tabular-nums after:h-px after:flex-1 after:bg-line">
+        {at()}
+      </p>
+    )}
   </Show>
 );
 
@@ -121,35 +131,40 @@ const CourseRow: Component<{
   return (
     <button
       type="button"
-      class={`course-row kind-${props.course.kind}`}
+      class={cx(
+        pressLarge,
+        `kind-${props.course.kind}`,
+        'block w-full cursor-pointer border-s-3 border-transparent px-3.5 py-[0.6rem] text-start',
+        'hover:border-kind/75 hover:bg-kind/9',
+      )}
       onClick={props.onSelect}
     >
-      <span class="course-row__head">
-        <span class="course-row__code">
+      <span class="flex items-center gap-2">
+        <span class="text-base font-medium">
           {props.course.resource?.code ?? props.course.title ?? 'Cours'}
         </span>
         <Show when={live()}>
-          <span class="badge badge--accent">en cours</span>
+          <span class={badge.accent}>en cours</span>
         </Show>
         <Show when={props.changed}>
           {(change) => (
-            <span class="badge badge--change">
+            <span class={badge.change}>
               {change() === 'added' ? 'ajouté' : 'modifié'}
             </span>
           )}
         </Show>
-        <span class="course-row__badges">
+        <span class="ml-auto flex items-center gap-1.5">
           <Show when={noted()}>
-            <span class="course-block__noted" title="Un devoir est rattaché à ce cours">✎</span>
+            <span class="mr-1 font-bold text-accent" title="Un devoir est rattaché à ce cours">✎</span>
           </Show>
-          <span class="badge badge--kind">{KIND_LABEL[props.course.kind]}</span>
+          <span class={badge.kind}>{KIND_LABEL[props.course.kind]}</span>
           <Show when={props.course.room}>
-            {(room) => <span class="badge badge--accent">{room()}</span>}
+            {(room) => <span class={badge.accent}>{room()}</span>}
           </Show>
         </span>
       </span>
 
-      <Show when={subject()}>{(text) => <span class="course-row__subject">{text()}</span>}</Show>
+      <Show when={subject()}>{(text) => <span class="mt-1 block text-sm text-muted">{text()}</span>}</Show>
     </button>
   );
 };

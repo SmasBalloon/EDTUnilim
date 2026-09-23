@@ -5,6 +5,7 @@ import { fetchWeek } from '../lib/api';
 import { groupBases } from '../lib/groups';
 import { update } from '../lib/settings';
 import { resolveCurrentWeek } from '../lib/time';
+import { chip, field, fieldLabel, fieldRow, link, note } from '../lib/ui';
 import { GroupPicker } from './GroupPicker';
 
 /**
@@ -22,22 +23,22 @@ export const Setup: Component<{ years: YearSummary[] }> = (props) => {
   });
 
   return (
-    <main class="setup">
-      <div class="setup__panel">
-        <h1 class="setup__title">Emploi du temps</h1>
-        <p class="setup__intro">
+    <main class="grid min-h-dvh place-items-center p-5">
+      <div class="w-full max-w-md">
+        <h1 class="text-2xl font-semibold">Emploi du temps</h1>
+        <p class="mt-1.5 mb-7 text-sm text-muted">
           IUT du Limousin — département informatique. Choisis ton année et ton groupe : ils sont
           gardés sur cet appareil.
         </p>
 
-        <section class="field">
-          <h2 class="field__label">Année</h2>
-          <div class="field__row">
+        <section class={field}>
+          <h2 class={fieldLabel}>Année</h2>
+          <div class={fieldRow}>
             <For each={props.years}>
               {(summary) => (
                 <button
                   type="button"
-                  class="chip"
+                  class={chip}
                   aria-pressed={year() === summary.year}
                   onClick={() => setYear(summary.year)}
                 >
@@ -48,17 +49,17 @@ export const Setup: Component<{ years: YearSummary[] }> = (props) => {
           </div>
         </section>
 
-        <p class="setup__note">
-          Ou <a class="setup__link" href="#compte">connecte-toi avec Discord</a> pour recevoir ton emploi du
+        <p class={`${note} mt-5`}>
+          Ou <a class={link} href="#compte">connecte-toi avec Discord</a> pour recevoir ton emploi du
           temps et ses changements en message privé.
         </p>
 
         <Show when={year() !== null}>
-          <section class="field">
-            <Show when={!bases.loading} fallback={<p class="setup__note">Lecture des groupes…</p>}>
+          <section class="mt-5">
+            <Show when={!bases.loading} fallback={<p class={note}>Lecture des groupes…</p>}>
               <Show
                 when={!bases.error}
-                fallback={<p class="setup__note">Emploi du temps indisponible pour le moment.</p>}
+                fallback={<p class={note}>Emploi du temps indisponible pour le moment.</p>}
               >
                 <GroupPicker
                   bases={bases() ?? []}

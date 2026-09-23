@@ -15,6 +15,7 @@ import { groupLabel } from '../lib/groups';
 import { KIND_LABEL } from '../lib/layout';
 import { settings, update } from '../lib/settings';
 import { humanDuration, longDate } from '../lib/time';
+import { badge, button, fieldLabel } from '../lib/ui';
 import { Sheet } from './Sheet';
 
 interface Props {
@@ -57,50 +58,51 @@ export const CourseModal: Component<Props> = (props) => {
       open={props.course !== null}
       onClose={props.onClose}
       label="Détail du cours"
-      class={`course-modal kind-${shown()?.kind ?? 'controle'}`}
+      class={`kind-${shown()?.kind ?? 'controle'}`}
     >
       <Show when={shown()}>
         {(course) => (
           <>
-            <header class="course-modal__header">
+            <header class="mb-5 flex items-start justify-between gap-4">
               <div>
-                <p class="course-modal__day">{longDate(course().date)}</p>
-                <p class="course-modal__time">
+                {/* « lundi 7 septembre » : seule l'initiale se capitalise en français. */}
+                <p class="text-sm font-semibold first-letter:uppercase">{longDate(course().date)}</p>
+                <p class="mt-0.5 text-sm text-muted tabular-nums">
                   {`${course().start} – ${course().end} · ${humanDuration(course().duration_minutes)}`}
                 </p>
               </div>
-              <button type="button" class="button" onClick={props.onClose} aria-label="Fermer">
+              <button type="button" class={button.plain} onClick={props.onClose} aria-label="Fermer">
                 <X size={16} aria-hidden="true" />
               </button>
             </header>
 
-            <div class="course-modal__title">
-              <span class="badge badge--kind">{KIND_LABEL[course().kind]}</span>
-              <h2 class="course-modal__code">
+            <div class="flex items-center gap-2.5">
+              <span class={badge.kind}>{KIND_LABEL[course().kind]}</span>
+              <h2 class="text-2xl font-semibold">
                 {course().resource?.code ?? course().title ?? 'Cours'}
               </h2>
             </div>
 
             <Show when={course().resource?.name ?? course().title}>
-              {(subject) => <p class="course-modal__subject">{subject()}</p>}
+              {(subject) => <p class="mt-1.5 text-base">{subject()}</p>}
             </Show>
 
             <Show when={props.slot}>
               {(slot) => (
-                <section class="course-modal__homework">
-                  <h3 class="field__label">Devoirs</h3>
-                  <ul class="course-modal__notes">
+                <section class="mt-5 border-t border-line pt-4">
+                  <h3 class={fieldLabel}>Devoirs</h3>
+                  <ul class="mb-2.5 grid gap-1.5">
                     <For each={about(course())}>
                       {(item) => (
-                        <li class="course-modal__note">
-                          <span class="course-modal__note-title">{item.title}</span>
+                        <li class="flex items-center gap-2 text-sm">
+                          <span class="min-w-0 flex-1 truncate">{item.title}</span>
                           {/* Un devoir noté avant que la semaine paraisse
                               attend son créneau : on le lui donne ici. Seul
                               celui qui l'a noté peut le rattacher. */}
                           <Show when={item.mine && !onCourse(item, course())}>
                             <button
                               type="button"
-                              class="button"
+                              class={button.plain}
                               title="Rattacher à ce cours"
                               onClick={() => void attach(item, course(), slot())}
                             >
@@ -115,7 +117,7 @@ export const CourseModal: Component<Props> = (props) => {
 
                   <button
                     type="button"
-                    class="button button--block"
+                    class={`${button.plain} w-full`}
                     onClick={() =>
                       props.onNote?.({
                         resource: course().resource?.code ?? null,
@@ -132,7 +134,7 @@ export const CourseModal: Component<Props> = (props) => {
               )}
             </Show>
 
-            <dl class="course-modal__facts">
+            <dl class="mt-5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 border-t border-line pt-4 text-sm [&_dt]:text-muted">
               <Show when={course().teacher}>
                 {(teacher) => (
                   <>
@@ -144,7 +146,7 @@ export const CourseModal: Component<Props> = (props) => {
                         {(id) => (
                           <button
                             type="button"
-                            class="course-modal__teacher"
+                            class="cursor-pointer text-start underline decoration-accent/60 underline-offset-[0.15em] hover:text-accent"
                             onClick={() => {
                               update({ teacher: id() });
                               props.onClose();

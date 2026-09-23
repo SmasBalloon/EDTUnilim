@@ -13,6 +13,7 @@ import {
   type Homework,
 } from '../lib/homework';
 import { clock, longDate, parseDate, startOfDay, todayIso } from '../lib/time';
+import { badge, button, card, centered, cx, link, page, pick, pickName, pill, sectionTitle, summary } from '../lib/ui';
 import { HomeworkSheet } from './HomeworkSheet';
 
 /** « pour demain », « pour le lundi 21 septembre », « en retard ». */
@@ -55,14 +56,30 @@ export const TodoPage: Component = () => {
   };
 
   const row = (item: Homework) => (
-    <li class="todo" classList={{ 'todo--done': item.done_by_me, 'todo--pending': item.pending }}>
+    <li
+      class={cx(
+        'flex items-start gap-3 rounded-card border border-line bg-surface p-3',
+        // Un devoir fait s'efface sans disparaître : on doit pouvoir le décocher.
+        item.done_by_me && 'opacity-55',
+        // Une proposition n'engage encore personne : elle se distingue d'un liseré.
+        item.pending && 'border-s-3 border-s-accent/60',
+      )}
+    >
       <Show
         when={!item.pending}
-        fallback={<span class="todo__badge">à confirmer</span>}
+        fallback={
+          <span class="mt-0.5 shrink-0 whitespace-nowrap rounded-full border border-accent/50 px-[0.45rem] py-[0.1rem] text-2xs font-semibold text-accent">
+            à confirmer
+          </span>
+        }
       >
         <button
           type="button"
-          class="todo__check"
+          class={cx(
+            'mt-0.5 grid size-[1.375rem] shrink-0 cursor-pointer place-items-center rounded-lg border-[1.5px] border-muted/60 text-on-accent',
+            'transition-[background-color,border-color,scale] duration-(--settle) ease-out active:scale-90 active:duration-(--press)',
+            'aria-checked:border-transparent aria-checked:bg-accent',
+          )}
           role="checkbox"
           aria-checked={item.done_by_me}
           aria-label={item.done_by_me ? 'Marquer à faire' : 'Marquer comme fait'}
@@ -75,17 +92,17 @@ export const TodoPage: Component = () => {
         </button>
       </Show>
 
-      <div class="todo__body">
-        <p class="todo__title">
+      <div class="min-w-0 flex-1">
+        <p class={cx('flex flex-wrap items-baseline gap-1.5 font-medium', item.done_by_me && 'line-through')}>
           <Show when={item.resource}>
-            {(code) => <span class="badge badge--kind">{code()}</span>}
+            {(code) => <span class={badge.kind}>{code()}</span>}
           </Show>
           {item.title}
         </p>
-        <p class="todo__meta">
+        <p class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[0.8125rem] text-muted">
           <Show when={whenDue(item, clock())}>
             {(when) => (
-              <span classList={{ accent: (item.due ?? '') <= todayIso(clock()) }}>{when()}</span>
+              <span class={cx((item.due ?? '') <= todayIso(clock()) && 'font-medium text-accent')}>{when()}</span>
             )}
           </Show>
           <span>{audienceLabel(item)}</span>
@@ -93,14 +110,16 @@ export const TodoPage: Component = () => {
             <span>{`noté par ${item.author_name}`}</span>
           </Show>
         </p>
-        <Show when={item.details}>{(text) => <p class="todo__details">{text()}</p>}</Show>
+        <Show when={item.details}>
+          {(text) => <p class="mt-1.5 whitespace-pre-line text-[0.8125rem] text-muted">{text()}</p>}
+        </Show>
       </div>
 
-      <div class="todo__actions">
+      <div class="flex shrink-0 items-center gap-1">
         <Show when={item.can_confirm}>
           <button
             type="button"
-            class="button"
+            class={button.plain}
             disabled={busy() === item.id}
             onClick={() => void run(item.id, () => confirmHomework(item.id))}
           >
@@ -110,7 +129,7 @@ export const TodoPage: Component = () => {
         <Show when={item.mine}>
           <button
             type="button"
-            class="button button--round"
+            class={button.round}
             title="Corriger"
             aria-label="Corriger"
             onClick={() => setEditing(item)}
@@ -119,7 +138,7 @@ export const TodoPage: Component = () => {
           </button>
           <button
             type="button"
-            class="button button--round"
+            class={button.round}
             title="Effacer"
             aria-label="Effacer"
             disabled={busy() === item.id}
@@ -134,12 +153,14 @@ export const TodoPage: Component = () => {
 
   const section = (title: string, items: Homework[], hint?: string) => (
     <Show when={items.length > 0}>
-      <section class="todo-section">
-        <h2 class="rooms-section__title">
-          {title} <span class="rooms-section__count">{items.length}</span>
+      <section>
+        <h2 class={sectionTitle}>
+          {title} <span class={pill}>{items.length}</span>
         </h2>
-        <Show when={hint}>{(text) => <p class="rooms-state__caption">{text()}</p>}</Show>
-        <ul class="todo-list">
+        <Show when={hint}>
+          {(text) => <p class="m-0 mb-2 text-sm text-muted first-letter:uppercase">{text()}</p>}
+        </Show>
+        <ul class="mt-2 grid gap-2">
           <For each={items}>{row}</For>
         </ul>
       </section>
@@ -147,27 +168,31 @@ export const TodoPage: Component = () => {
   );
 
   return (
-    <div class="teachers">
-      <div class="summary">
-        <div class="card teachers__head">
-          <button type="button" class="compare__pick todo__add" onClick={() => setAdding(true)}>
+    <div class={page}>
+      <div class={summary}>
+        <div class={`${card} flex items-center gap-2 p-2`}>
+          <button
+            type="button"
+            class={`${pick} min-w-48 flex-initial justify-between gap-3`}
+            onClick={() => setAdding(true)}
+          >
             <Plus size={16} aria-hidden="true" />
-            <span class="compare__pick-name">Noter un devoir</span>
+            <span class={pickName}>Noter un devoir</span>
           </button>
           <Show when={todo().length > 0}>
-            <span class="week-summary__workload">{`${todo().length} à faire`}</span>
+            <span class={pill}>{`${todo().length} à faire`}</span>
           </Show>
         </div>
       </div>
 
-      <main class="app__timetable">
+      <main class="timetable">
         <Show
           when={!['unauthenticated', 'auth_disabled'].includes(homeworkError()?.code ?? '')}
           fallback={
-            <div class="centered">
+            <div class={centered}>
               <p>
                 Les devoirs sont liés à ton compte.{' '}
-                <a class="setup__link" href="#compte">
+                <a class={link} href="#compte">
                   Connecte-toi avec Discord
                 </a>{' '}
                 pour les noter.
@@ -178,7 +203,7 @@ export const TodoPage: Component = () => {
           <Show
             when={homework().length > 0}
             fallback={
-              <div class="centered">
+              <div class={centered}>
                 <p>
                   {homeworkLoading()
                     ? 'Chargement…'
@@ -187,7 +212,7 @@ export const TodoPage: Component = () => {
               </div>
             }
           >
-            <div class="todo-page">
+            <div class="mx-auto grid max-w-176 gap-6 px-edge pb-6">
               {section(
                 'À confirmer',
                 toConfirm(),

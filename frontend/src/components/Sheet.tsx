@@ -1,7 +1,9 @@
 import { Show, createEffect, createSignal, onCleanup, onMount, type Component, type JSX } from 'solid-js';
+import { X } from 'lucide-solid';
 
 import { useBottomSheet } from '../lib/media';
 import { Spring, Velocity, project, rubberband } from '../lib/motion';
+import { button, cx } from '../lib/ui';
 
 interface Props {
   open: boolean;
@@ -174,13 +176,36 @@ export const Sheet: Component<Props> = (props) => {
 
   return (
     <Show when={visible()}>
+      {/*
+        * Le voile s'assombrit et se floute au rythme de la feuille :
+        * `--presence` vaut `0` quand elle est dehors, `1` quand elle est
+        * posée, et tout ce qu'il y a entre les deux pendant qu'un doigt la
+        * tient. C'est `paint` qui l'écrit, image par image.
+        */}
       <div
-        class="sheet-backdrop"
+        class={cx(
+          'fixed inset-0 z-50 flex items-end justify-center [--presence:0] sm:items-center',
+          'bg-[rgb(0_0_0/calc(0.5*var(--presence)))] backdrop-blur-[calc(var(--presence)*12px)]',
+        )}
         ref={backdrop}
         onClick={() => retract(() => { setVisible(false); props.onClose(); })}
       >
+        {/*
+          * La feuille est une matière épaisse : elle laisse deviner ce qu'il y
+          * a dessous sans jamais le donner à lire. Sa position est menée par
+          * un ressort, donc aucune transition — elle doit pouvoir être
+          * rattrapée à tout instant.
+          */}
         <div
-          class={`sheet ${props.class ?? ''}`}
+          class={cx(
+            'max-h-[85dvh] w-full overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]',
+            'rounded-t-sheet border border-line border-t-edge shadow-pop sm:max-w-lg sm:rounded-sheet',
+            'bg-surface/88 backdrop-blur-(--material-blur) backdrop-saturate-180',
+            'reduce-transparency:bg-surface reduce-transparency:backdrop-filter-none',
+            // Le geste vertical appartient à la feuille tant qu'elle est en haut.
+            'touch-pan-y will-change-transform',
+            props.class,
+          )}
           ref={panel}
           role="dialog"
           aria-modal="true"
@@ -191,8 +216,11 @@ export const Sheet: Component<Props> = (props) => {
           onPointerUp={release}
           onPointerCancel={release}
         >
+          {/* La poignée : elle dit que la feuille se prend et se tire. */}
           <Show when={bottom()}>
-            <div class="sheet__grip" aria-hidden="true" />
+            <div class="-mt-2.5 mb-3 flex cursor-grab justify-center p-1.5" aria-hidden="true">
+              <span class="h-[0.3125rem] w-9 rounded-full bg-muted/45" />
+            </div>
           </Show>
           {props.children}
         </div>
@@ -200,3 +228,13 @@ export const Sheet: Component<Props> = (props) => {
     </Show>
   );
 };
+
+/** Le titre d'une feuille, et de quoi la fermer. */
+export const SheetHeader: Component<{ title: string; onClose: () => void }> = (props) => (
+  <header class="mb-5 flex items-center justify-between">
+    <h2 class="text-lg font-semibold">{props.title}</h2>
+    <button type="button" class={button.plain} onClick={props.onClose} aria-label="Fermer">
+      <X size={16} aria-hidden="true" />
+    </button>
+  </header>
+);

@@ -1,6 +1,7 @@
 import { For, createEffect, on, onCleanup, onMount, type JSX } from 'solid-js';
 
 import { Spring, Velocity, project, rubberband } from '../lib/motion';
+import { cx } from '../lib/ui';
 
 interface Props<T> {
   /** Les pages, dans l'ordre où on les feuillette. */
@@ -150,20 +151,29 @@ export function Pager<T>(props: Props<T>): JSX.Element {
   };
 
   return (
+    // `overflow-x: clip` découpe les pages voisines sans créer de conteneur de
+    // défilement, ce qui laisse les en-têtes d'heures continuer de coller au
+    // haut de l'écran.
     <div
-      class="pager"
+      class="relative overflow-x-clip"
       ref={frame}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={release}
       onPointerCancel={release}
     >
-      <div class="pager__track" ref={track}>
+      <div class="relative will-change-transform" ref={track}>
         <For each={props.items}>
           {(item, position) => (
+            // Chaque page est décalée de sa place dans la semaine. Seule la page
+            // ouverte reste dans le flux : c'est elle qui donne sa hauteur à la
+            // zone, les autres ne l'étirent pas à la hauteur du jour le plus
+            // chargé.
             <div
-              class="pager__page"
-              classList={{ 'pager__page--shown': position() === props.index }}
+              class={cx(
+                'left-[calc(var(--page)*100%)] w-full',
+                position() === props.index ? 'relative' : 'absolute top-0',
+              )}
               style={{ '--page': String(position()) }}
               aria-hidden={position() === props.index ? undefined : 'true'}
             >

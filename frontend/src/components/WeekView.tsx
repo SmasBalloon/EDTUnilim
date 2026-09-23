@@ -1,10 +1,11 @@
-import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
+import { For, Show, createMemo, createSignal, type Component, type ParentComponent } from 'solid-js';
 
 import type { Course, Week } from '../lib/api';
 import { gridBounds, packDay } from '../lib/layout';
 import { useCompact } from '../lib/media';
 import type { ViewMode } from '../lib/settings';
 import { clock, dayIndex, dayLabel, isRunning, nowMinutes, shortDate, toMinutes, todayIso } from '../lib/time';
+import { cx, gridCorner, gridHead, hourMark, nowLine } from '../lib/ui';
 import { CourseBlock } from './CourseBlock';
 import { DayCard } from './DayCard';
 import { DayTabs } from './DayTabs';
@@ -59,7 +60,7 @@ export const WeekView: Component<Props> = (props) => {
   );
 
   return (
-    <div class="week-view" classList={{ 'week-view--single': compact() }}>
+    <WeekFrame single={compact()}>
       <Show when={compact()}>
         <DayTabs
           days={props.days}
@@ -78,18 +79,33 @@ export const WeekView: Component<Props> = (props) => {
           {(only) => day([only])}
         </Pager>
       </Show>
-    </div>
+    </WeekFrame>
   );
 };
+
+/**
+ * Le cadre d'une semaine. Quand un seul jour tient à l'écran (`single`), les
+ * grilles et les colonnes qu'il contient prennent toute la largeur, par les
+ * variantes `group-data-single/week:`.
+ *
+ * En jour unique, le geste horizontal est celui de l'application : on interdit
+ * le panoramique latéral au navigateur, sinon il le prend pour un retour en
+ * arrière et quitte la page avant même que le code ne voie le toucher.
+ */
+export const WeekFrame: ParentComponent<{ single: boolean }> = (props) => (
+  <div class={cx('group/week', props.single && 'touch-pan-y')} data-single={props.single ? '' : undefined}>
+    {props.children}
+  </div>
+);
 
 type ViewProps = Props & { byDay: Map<string, Course[]> };
 
 /** Les jours à la suite, chacun dans sa carte. */
 const DayStrip: Component<ViewProps> = (props) => (
-  <div class="day-strip">
+  <div class="flex items-start gap-gap px-edge pb-6">
     <For each={props.days}>
       {(day) => (
-        <div class="day-strip__column">
+        <div class="min-w-60 flex-[1_0_15rem] snap-start group-data-single/week:min-w-0 group-data-single/week:basis-full">
           <DayCard
             date={day.date}
             courses={props.byDay.get(day.date) ?? []}
@@ -121,8 +137,16 @@ const TimeGrid: Component<ViewProps> = (props) => {
   const offset = (m: number) => ((m - bounds().start) / 60) * HOUR_HEIGHT + EDGE_PAD;
 
   return (
+    // Une colonne par jour, plus la colonne des heures. Les colonnes se
+    // partagent la largeur sans jamais passer sous `--column-min` : la semaine
+    // reste entière, quitte à défiler horizontalement sur téléphone.
     <div
-      class="week-grid"
+      class={cx(
+        'grid w-full [--column-min:clamp(9rem,40vw,11rem)] [--gutter:clamp(2.25rem,7vw,3.25rem)]',
+        'grid-cols-[var(--gutter)_repeat(var(--day-count),minmax(0,1fr))]',
+        'min-w-[calc(var(--gutter)+var(--day-count)*var(--column-min))]',
+        'group-data-single/week:min-w-full',
+      )}
       style={{
         '--day-count': String(props.days.length),
         '--hour-height': `${HOUR_HEIGHT}px`,
@@ -130,21 +154,32 @@ const TimeGrid: Component<ViewProps> = (props) => {
         '--body-pad': `${EDGE_PAD}px`,
       }}
     >
-      <div class="week-grid__corner" />
+      <div class={gridCorner} />
       <For each={props.days}>
         {(day) => (
-          <div class="week-grid__day" classList={{ 'week-grid__day--today': day.date === today() }}>
-            <div class="week-grid__day-name">{dayLabel(day.date)}</div>
-            <div class="week-grid__day-date">{shortDate(day.date)}</div>
+          <div
+            class={cx(
+              gridHead,
+              'text-center',
+              day.date === today() && 'text-accent shadow-[inset_0_-2px_0_var(--color-accent)]',
+            )}
+          >
+            <div class="p-2">
+              <div class="text-2xs font-semibold uppercase tracking-[0.04em]">{dayLabel(day.date)}</div>
+              <div class="text-2xs text-muted">{shortDate(day.date)}</div>
+            </div>
           </div>
         )}
       </For>
 
-      <div class="week-grid__gutter">
-        <div class="week-grid__hours">
+      <div class="sticky left-0 z-10 bg-bg">
+        <div class="relative h-(--body-height)">
           <For each={hours()}>
             {(hour) => (
-              <span class="week-grid__hour" style={{ top: `${offset(hour)}px` }}>
+              <span
+                class={hourMark}
+                style={{ top: `${offset(hour)}px` }}
+              >
                 {`${Math.floor(hour / 60)}h`}
               </span>
             )}
@@ -155,8 +190,10 @@ const TimeGrid: Component<ViewProps> = (props) => {
       <For each={props.days}>
         {(day) => (
           <div
-            class="week-grid__column"
-            classList={{ 'week-grid__column--today': day.date === today() }}
+            class={cx(
+              'hour-lines relative h-(--body-height) border-l border-line',
+              day.date === today() && 'bg-accent/7',
+            )}
           >
             <For each={packDay(props.byDay.get(day.date) ?? [])}>
               {(placed) => {
@@ -182,7 +219,7 @@ const TimeGrid: Component<ViewProps> = (props) => {
             </For>
 
             <Show when={day.date === today() && minutes() >= bounds().start && minutes() <= bounds().end}>
-              <div class="week-grid__now" style={{ top: `${offset(minutes())}px` }} />
+              <div class={nowLine} style={{ top: `${offset(minutes())}px` }} />
             </Show>
           </div>
         )}

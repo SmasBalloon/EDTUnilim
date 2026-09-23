@@ -1,5 +1,4 @@
 import { For, type Component } from 'solid-js';
-import { X } from 'lucide-solid';
 
 import {
   DEFAULT_ACCENT,
@@ -9,8 +8,21 @@ import {
   type Theme,
   type ViewMode,
 } from '../lib/settings';
+import {
+  button,
+  chip,
+  field,
+  fieldLabel,
+  fieldRow,
+  fieldStack,
+  option,
+  optionHint,
+  optionTitle,
+  segment,
+  segmentOption,
+} from '../lib/ui';
 import { GroupPicker } from './GroupPicker';
-import { Sheet } from './Sheet';
+import { Sheet, SheetHeader } from './Sheet';
 
 interface Props {
   open: boolean;
@@ -39,40 +51,35 @@ const accent = () => toAccent(settings().accent) ?? DEFAULT_ACCENT;
 
 export const SettingsSheet: Component<Props> = (props) => (
   <Sheet open={props.open} onClose={props.onClose} label="Réglages">
-    <header class="sheet__header">
-      <h2 class="sheet__title">Réglages</h2>
-      <button type="button" class="button" onClick={props.onClose} aria-label="Fermer">
-        <X size={16} aria-hidden="true" />
-      </button>
-    </header>
+    <SheetHeader title="Réglages" onClose={props.onClose} />
 
-    <section class="field">
-      <h3 class="field__label">Affichage de la semaine</h3>
-      <div class="field__stack">
+    <section class={field}>
+      <h3 class={fieldLabel}>Affichage de la semaine</h3>
+      <div class={fieldStack}>
         <For each={VIEWS}>
           {(view) => (
             <button
               type="button"
-              class="option"
+              class={option}
               aria-pressed={settings().view === view.value}
               onClick={() => update({ view: view.value })}
             >
-              <span class="option__title">{view.label}</span>
-              <span class="option__hint">{view.hint}</span>
+              <span class={optionTitle}>{view.label}</span>
+              <span class={optionHint}>{view.hint}</span>
             </button>
           )}
         </For>
       </div>
     </section>
 
-    <section class="field">
-      <h3 class="field__label">Apparence</h3>
-      <div class="segment">
+    <section class={field}>
+      <h3 class={fieldLabel}>Apparence</h3>
+      <div class={segment}>
         <For each={THEMES}>
           {(theme) => (
             <button
               type="button"
-              class="segment__option"
+              class={segmentOption}
               aria-pressed={settings().theme === theme.value}
               onClick={() => update({ theme: theme.value })}
             >
@@ -83,18 +90,23 @@ export const SettingsSheet: Component<Props> = (props) => (
       </div>
     </section>
 
-    <section class="field">
-      <h3 class="field__label">Couleur</h3>
-      <div class="field__row picker-color">
+    <section class={field}>
+      <h3 class={fieldLabel}>Couleur</h3>
+      {/* Une pastille qui ouvre la palette du système, la valeur en clair à
+          côté pour qui sait ce qu'il veut, et le retour au rouge d'origine. */}
+      <div class={`${fieldRow} items-center`}>
         {/*
           * La pastille est le sélecteur lui-même : l'`input` couvre le disque
           * sans se voir, pour que le doigt ouvre la palette du système là où
           * la couleur se montre.
           */}
-        <span class="picker-color__dot" style={{ '--swatch': accent() }}>
+        <span
+          class="relative size-9 overflow-hidden rounded-full border border-line bg-(--swatch) shadow-[inset_0_0_0_2px_var(--color-surface)]"
+          style={{ '--swatch': accent() }}
+        >
           <input
             type="color"
-            class="picker-color__input"
+            class="absolute inset-0 size-full cursor-pointer opacity-0"
             aria-label="Couleur d'accent"
             value={accent()}
             onInput={(event) => update({ accent: event.currentTarget.value })}
@@ -102,7 +114,7 @@ export const SettingsSheet: Component<Props> = (props) => (
         </span>
         <input
           type="text"
-          class="picker-color__hex"
+          class="w-26 rounded-control border border-line bg-surface px-2.5 py-[0.3rem] text-[0.8125rem] lowercase tabular-nums focus-visible:border-accent"
           inputMode="text"
           spellcheck={false}
           maxLength={7}
@@ -118,7 +130,7 @@ export const SettingsSheet: Component<Props> = (props) => (
         />
         <button
           type="button"
-          class="chip"
+          class={chip}
           disabled={accent() === DEFAULT_ACCENT}
           onClick={() => update({ accent: DEFAULT_ACCENT })}
         >
@@ -127,14 +139,14 @@ export const SettingsSheet: Component<Props> = (props) => (
       </div>
     </section>
 
-    <section class="field">
-      <h3 class="field__label">Année</h3>
-      <div class="field__row">
+    <section class={field}>
+      <h3 class={fieldLabel}>Année</h3>
+      <div class={fieldRow}>
         <For each={props.years}>
           {(year) => (
             <button
               type="button"
-              class="chip"
+              class={chip}
               aria-pressed={settings().year === year}
               onClick={() => update({ year, group: null })}
             >
@@ -145,7 +157,7 @@ export const SettingsSheet: Component<Props> = (props) => (
       </div>
     </section>
 
-    <section class="field">
+    <section class={field}>
       <GroupPicker
         bases={props.bases}
         value={settings().group}
@@ -153,10 +165,10 @@ export const SettingsSheet: Component<Props> = (props) => (
       />
     </section>
 
-    <div class="sheet__footer">
+    <div class="mt-6">
       <button
         type="button"
-        class="button button--block"
+        class={`${button.plain} w-full`}
         disabled={props.reloading}
         onClick={props.onReload}
       >

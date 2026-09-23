@@ -31,10 +31,12 @@ import { groupBases, groupLabel, weekDays } from './lib/groups';
 import { downloadIcs } from './lib/ics';
 import { clock, greeting, periodLabel, resolveCurrentWeek } from './lib/time';
 import { settings, update, type ViewMode } from './lib/settings';
+import { centered, cx, note, press, summary as headCards } from './lib/ui';
 import { AccountPage } from './components/AccountPage';
 import { ChangesBar } from './components/ChangesBar';
 import { ComparePage } from './components/ComparePage';
 import { CourseModal } from './components/CourseModal';
+import { Footer } from './components/Footer';
 import { HomeworkSheet } from './components/HomeworkSheet';
 import { RoomsPage } from './components/RoomsPage';
 import { TeachersPage } from './components/TeachersPage';
@@ -82,9 +84,16 @@ const TITLES: Record<Exclude<Page, 'timetable'>, [string, string]> = {
  * Toutes ont le même gabarit et la même matière ; seule l'icône change. Le
  * libellé n'est pas affiché mais reste dit, à la souris comme au lecteur
  * d'écran : à cette taille, sept libellés ne tiendraient pas sur une ligne.
+ *
+ * Posée sur le rouge, c'est une matière claire sur une matière plus lourde —
+ * jamais l'inverse, la lisibilité s'y perdrait. Dans un bloc, elle ne porte
+ * plus son propre fond : c'est le bloc qui le donne, et seule celle qui est
+ * active s'en détache.
  */
 const Action: Component<{
   label: string;
+  /** Rangée dans un bloc de commandes (`group`). */
+  grouped?: boolean;
   /** Page en cours : « vous êtes ici », pour qui écoute la page. */
   current?: boolean;
   /** Choix retenu, pour une commande à deux états. */
@@ -95,7 +104,18 @@ const Action: Component<{
 }> = (props) => (
   <button
     type="button"
-    class="button button--on-accent"
+    class={cx(
+      press,
+      'inline-flex min-h-9 min-w-9 items-center justify-center rounded-control border px-2.5 font-semibold text-on-accent',
+      'cursor-pointer disabled:cursor-default disabled:opacity-40 pointer-coarse:min-h-10',
+      // Sur téléphone, chaque pixel compte entre le salut et les commandes.
+      'max-[34rem]:min-w-8 max-[34rem]:px-1.5',
+      props.grouped
+        ? 'border-transparent hover:not-disabled:bg-white/20'
+        : 'border-white/22 bg-white/16 backdrop-blur-md hover:not-disabled:bg-white/30 reduce-transparency:backdrop-filter-none',
+      // La page qu'on regarde, ou l'affichage choisi.
+      'aria-[current=page]:bg-on-accent aria-[current=page]:text-accent aria-pressed:bg-on-accent aria-pressed:text-accent',
+    )}
     title={props.label}
     aria-label={props.label}
     aria-current={props.current ? 'page' : undefined}
@@ -116,6 +136,14 @@ const NAV: { page: Page; label: string; icon: () => JSX.Element }[] = [
   { page: 'todo', label: 'Devoirs à faire', icon: () => <ListChecks size={16} aria-hidden="true" /> },
   { page: 'account', label: 'Compte Discord', icon: () => <UserRound size={16} aria-hidden="true" /> },
 ];
+
+/*
+ * Les commandes se lisent en blocs : l'affichage de la semaine, les pages,
+ * puis les réglages. Ce qui va ensemble tient dans la même matière claire, ce
+ * qui est isolé flotte seul.
+ */
+const group =
+  'flex items-center gap-0.5 rounded-[calc(var(--radius-control)+0.1875rem)] bg-white/14 p-[0.1875rem] backdrop-blur-md max-[34rem]:gap-0 max-[34rem]:p-0.5';
 
 /** Les deux façons de lire la semaine. */
 const VIEWS: { value: ViewMode; label: string; icon: () => JSX.Element }[] = [
@@ -305,12 +333,12 @@ export function App() {
     <Show
       when={years()}
       fallback={
-        <main class="setup">
+        <main class="grid min-h-dvh place-items-center p-5">
           <Show
             when={!years.error}
-            fallback={<p class="setup__note">Service injoignable. Réessaie plus tard.</p>}
+            fallback={<p class={note}>Service injoignable. Réessaie plus tard.</p>}
           >
-            <p class="setup__note">Chargement…</p>
+            <p class={note}>Chargement…</p>
           </Show>
         </main>
       }
@@ -320,29 +348,42 @@ export function App() {
           when={page() !== 'timetable' || (settings().year !== null && settings().group !== null)}
           fallback={<Setup years={loaded()} />}
         >
-          <div class="app">
-            {/* Bandeau : qui on est, et les actions de l'application. */}
-            <header class="banner">
-              <div class="banner__who">
-                <h1 class="banner__greeting">
+          <div class="flex h-dvh flex-col overflow-x-hidden">
+            {/* Bandeau : qui on est, et les actions de l'application. Il laisse
+                dépasser les cartes de tête sur sa hauteur, et se pose sur le
+                contenu par une ombre, sans filet tranchant. */}
+            <header
+              class={cx(
+                'bg-banner flex shrink-0 items-center gap-3 px-edge text-on-accent',
+                'pt-[max(clamp(0.625rem,2.5vw,1rem),env(safe-area-inset-top))] pb-[calc(var(--spacing-overlap)+clamp(0.625rem,2vw,1rem))]',
+                'shadow-[0_10px_30px_-22px_rgb(0_0_0/0.8)]',
+              )}
+            >
+              {/* Le salut cède la place aux commandes plutôt que de les pousser dehors. */}
+              <div class="min-w-0">
+                <h1 class="truncate text-[clamp(1.125rem,4.5vw,1.375rem)] font-semibold">
                   {page() === 'timetable' ? greeting(clock()) : TITLES[page() as 'rooms'][0]}
                 </h1>
-                <p class="banner__identity">
+                {/* Sur une surface colorée, un gris pâle disparaît : le
+                    sous-titre garde du contraste plutôt que de s'effacer. */}
+                <p class="mt-0.5 truncate text-[0.8125rem] tracking-[0.01em] text-white/88">
                   {page() === 'timetable'
                     ? `Vous êtes en ${groupLabel(settings().group ?? '')}.`
                     : TITLES[page() as 'rooms'][1]}
                 </p>
               </div>
 
-              <div class="banner__actions">
+              <div class="ml-auto flex shrink-0 items-center gap-1.5 max-[34rem]:gap-1">
                 {/* L'affichage de la semaine : deux états d'une même chose,
-                    donc un sélecteur — et il ne paraît que là où il agit. */}
+                    donc un sélecteur — et il ne paraît que là où il agit. Sur
+                    téléphone, il s'efface : il reste à portée dans les réglages. */}
                 <Show when={page() === 'timetable' || page() === 'teachers'}>
-                  <div class="banner__group banner__views" role="group" aria-label="Affichage de la semaine">
+                  <div class={`${group} max-[34rem]:hidden`} role="group" aria-label="Affichage de la semaine">
                     <For each={VIEWS}>
                       {(item) => (
                         <Action
                           label={item.label}
+                          grouped
                           pressed={settings().view === item.value}
                           onClick={() => update({ view: item.value })}
                         >
@@ -371,11 +412,12 @@ export function App() {
                 {/* Les pages sont toutes là, toujours dans le même ordre, et
                     celle qu'on regarde est marquée : on sait où l'on est et
                     ce qu'il y a à côté, sans que le bandeau se réarrange. */}
-                <nav class="banner__group" aria-label="Pages">
+                <nav class={group} aria-label="Pages">
                   <For each={NAV}>
                     {(item) => (
                       <Action
                         label={item.label}
+                        grouped
                         current={page() === item.page}
                         onClick={() => goTo(item.page)}
                       >
@@ -426,7 +468,7 @@ export function App() {
               }
             >
               {/* Les deux cartes de tête chevauchent le bas du bandeau. */}
-              <div class="summary">
+              <div class={headCards}>
                 <Show when={todayWeek()} fallback={<div />}>
                   {(current) => <StatusCard courses={current().courses} />}
                 </Show>
@@ -448,11 +490,11 @@ export function App() {
                 <ChangesBar changes={changes()} onSeen={markSeen} />
               </Show>
 
-              <main class="app__timetable">
+              <main class="timetable">
                 <Show
                   when={data()}
                   fallback={
-                    <div class="centered">
+                    <div class={centered}>
                       <Show when={error()} fallback={<p>Chargement de la semaine…</p>}>
                         <p>
                           {error() instanceof ApiError && (error() as ApiError).isMissing
@@ -467,7 +509,7 @@ export function App() {
                     <Show
                       when={loadedWeek().filtered.courses.length > 0}
                       fallback={
-                        <div class="centered">
+                        <div class={centered}>
                           <p>{`Aucun cours pour ${groupLabel(settings().group ?? '')} cette semaine.`}</p>
                         </div>
                       }
@@ -484,12 +526,13 @@ export function App() {
                 </Show>
               </main>
 
-              <footer class="app__footer">
+              <Footer>
                 <Show when={data()}>
                   {(loadedWeek) => (
                     <>
                       <span>{`${loadedWeek().filtered.count} cours · lus dans le PDF du département`}</span>
                       <a
+                        class="ml-auto whitespace-nowrap underline"
                         href={loadedWeek().filtered.source.url}
                         target="_blank"
                         rel="noreferrer"
@@ -499,7 +542,7 @@ export function App() {
                     </>
                   )}
                 </Show>
-              </footer>
+              </Footer>
             </Show>
 
             <CourseModal

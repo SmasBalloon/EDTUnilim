@@ -16,6 +16,7 @@ import {
 import { groupBases, groupLabel } from '../lib/groups';
 import { settings, update } from '../lib/settings';
 import { resolveCurrentWeek } from '../lib/time';
+import { button, card, chip, field, fieldLabel, fieldRow, fieldStack, note, notice, option, optionHint, optionTitle } from '../lib/ui';
 import { GroupPicker } from './GroupPicker';
 
 /** Motifs d'échec renvoyés par l'API au retour de Discord (`#compte?erreur=…`). */
@@ -40,6 +41,10 @@ function takeLoginError(): string | null {
   return code === null ? null : (LOGIN_ERRORS[code] ?? 'La connexion a échoué.');
 }
 
+/** Une carte de la page de compte. */
+const panel = `${card} grid gap-3.5 p-4`;
+const title = 'text-base font-semibold';
+
 /**
  * Compte Discord : connexion, classe suivie et messages privés. La connexion
  * reste facultative — le site fonctionne sans.
@@ -51,18 +56,20 @@ export const AccountPage: Component<{ years: YearSummary[] }> = (props) => {
   const disabled = () => me.error instanceof ApiError && me.error.code === 'auth_disabled';
 
   return (
-    <main class="page">
-      <div class="account">
+    // Page d'un seul bloc : la zone qui défile remonte sous le bas du bandeau,
+    // pour que la première carte le chevauche comme sur les autres pages.
+    <main class="relative z-10 -mt-overlap min-h-0 flex-1 overflow-y-auto">
+      <div class="mx-auto grid w-full max-w-xl gap-gap px-edge pb-6">
         <Show when={loginError}>
-          {(message) => <p class="notice notice--error">{message()}</p>}
+          {(message) => <p class={notice(true)}>{message()}</p>}
         </Show>
 
-        <Show when={!me.loading} fallback={<p class="setup__note">Chargement…</p>}>
+        <Show when={!me.loading} fallback={<p class={note}>Chargement…</p>}>
           <Show
             when={!me.error}
             fallback={
-              <div class="card account__card">
-                <p class="setup__note">
+              <div class={panel}>
+                <p class={note}>
                   {disabled()
                     ? "La connexion Discord n'est pas configurée sur ce serveur."
                     : `Compte indisponible : ${(me.error as Error).message}`}
@@ -81,17 +88,17 @@ export const AccountPage: Component<{ years: YearSummary[] }> = (props) => {
 };
 
 const SignIn: Component = () => (
-  <section class="card account__card">
-    <h2 class="account__title">Recevoir son emploi du temps sur Discord</h2>
-    <ul class="account__list">
+  <section class={panel}>
+    <h2 class={title}>Recevoir son emploi du temps sur Discord</h2>
+    <ul class="grid list-disc gap-1 pl-[1.125rem] text-sm">
       <li>chaque nouvelle semaine publiée, en message privé, avec son fichier .ics ;</li>
       <li>un message dès qu’un cours de ta classe change : salle, horaire, enseignant.</li>
     </ul>
-    <p class="setup__note">
+    <p class={note}>
       Tu seras ajouté au serveur Discord de l’emploi du temps : sans serveur commun, le bot ne peut pas
       t’écrire. Seuls ton identifiant, ton pseudo et ton avatar sont conservés.
     </p>
-    <a class="button button--discord button--block" href={LOGIN_URL}>
+    <a class={`${button.discord} w-full`} href={LOGIN_URL}>
       Se connecter avec Discord
     </a>
   </section>
@@ -154,40 +161,44 @@ const Profile: Component<{ me: Me; years: YearSummary[]; onChange: (me: Me | nul
 
   return (
     <>
-      <section class="card account__card">
-        <header class="account__profile">
+      <section class={panel}>
+        <header class="flex items-center gap-3">
           <Show
             when={props.me.avatar_url}
-            fallback={<span class="account__avatar account__avatar--empty">{props.me.name.charAt(0)}</span>}
+            fallback={
+              <span class="grid size-12 shrink-0 place-items-center rounded-full bg-elevated text-xl font-semibold text-muted uppercase">
+                {props.me.name.charAt(0)}
+              </span>
+            }
           >
-            {(url) => <img class="account__avatar" src={url()} alt="" width="48" height="48" />}
+            {(url) => <img class="size-12 shrink-0 rounded-full object-cover" src={url()} alt="" width="48" height="48" />}
           </Show>
           <div>
-            <p class="account__name">{props.me.name}</p>
-            <p class="setup__note">
+            <p class="font-semibold">{props.me.name}</p>
+            <p class={`${note} mt-0.5`}>
               {props.me.year !== null && props.me.group !== null
                 ? `BUT ${props.me.year} ${groupLabel(props.me.group)}${props.me.notify ? ' · messages privés actifs' : ''}`
                 : 'Aucune classe choisie'}
             </p>
           </div>
-          <button type="button" class="button account__logout" onClick={signOut}>
+          <button type="button" class={`${button.plain} ml-auto`} onClick={signOut}>
             <LogOut size={14} aria-hidden="true" />
             Déconnexion
           </button>
         </header>
       </section>
 
-      <section class="card account__card">
-        <h2 class="account__title">Ma classe</h2>
+      <section class={panel}>
+        <h2 class={title}>Ma classe</h2>
 
-        <section class="field">
-          <h3 class="field__label">Année</h3>
-          <div class="field__row">
+        <section class={field}>
+          <h3 class={fieldLabel}>Année</h3>
+          <div class={fieldRow}>
             <For each={props.years}>
               {(summary) => (
                 <button
                   type="button"
-                  class="chip"
+                  class={chip}
                   aria-pressed={year() === summary.year}
                   onClick={() => {
                     if (year() !== summary.year) setGroup(null);
@@ -202,30 +213,30 @@ const Profile: Component<{ me: Me; years: YearSummary[]; onChange: (me: Me | nul
         </section>
 
         <Show when={year() !== null}>
-          <section class="field">
-            <Show when={!bases.loading} fallback={<p class="setup__note">Lecture des groupes…</p>}>
+          <section class={field}>
+            <Show when={!bases.loading} fallback={<p class={note}>Lecture des groupes…</p>}>
               <GroupPicker bases={bases() ?? []} value={group()} onSelect={setGroup} />
             </Show>
           </section>
         </Show>
 
-        <section class="field">
-          <h3 class="field__label">Messages privés</h3>
-          <div class="field__stack">
-            <button type="button" class="option" aria-pressed={notify()} onClick={() => setNotify(true)}>
-              <span class="option__title">Activés</span>
-              <span class="option__hint">nouvelles semaines avec leur .ics, et changements de ta classe</span>
+        <section class={field}>
+          <h3 class={fieldLabel}>Messages privés</h3>
+          <div class={fieldStack}>
+            <button type="button" class={option} aria-pressed={notify()} onClick={() => setNotify(true)}>
+              <span class={optionTitle}>Activés</span>
+              <span class={optionHint}>nouvelles semaines avec leur .ics, et changements de ta classe</span>
             </button>
-            <button type="button" class="option" aria-pressed={!notify()} onClick={() => setNotify(false)}>
-              <span class="option__title">Désactivés</span>
-              <span class="option__hint">le compte garde ta classe, sans rien t’envoyer</span>
+            <button type="button" class={option} aria-pressed={!notify()} onClick={() => setNotify(false)}>
+              <span class={optionTitle}>Désactivés</span>
+              <span class={optionHint}>le compte garde ta classe, sans rien t’envoyer</span>
             </button>
           </div>
         </section>
 
         <Show when={status()}>
           {(current) => (
-            <p class="notice" classList={{ 'notice--error': current().error }} role="status">
+            <p class={notice(current().error)} role="status">
               {current().text}
             </p>
           )}
@@ -233,7 +244,7 @@ const Profile: Component<{ me: Me; years: YearSummary[]; onChange: (me: Me | nul
 
         <button
           type="button"
-          class="button button--primary button--block"
+          class={`${button.primary} w-full`}
           disabled={saving() || !complete() || !dirty()}
           onClick={save}
         >
@@ -241,7 +252,11 @@ const Profile: Component<{ me: Me; years: YearSummary[]; onChange: (me: Me | nul
         </button>
       </section>
 
-      <button type="button" class="account__delete" onClick={remove}>
+      <button
+        type="button"
+        class="cursor-pointer justify-self-center px-2 py-1 text-[0.8125rem] text-muted underline hover:text-accent"
+        onClick={remove}
+      >
         Supprimer mon compte
       </button>
     </>

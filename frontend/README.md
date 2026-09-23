@@ -118,17 +118,21 @@ VITE_API_URL=https://edt.exemple.fr npm run build
 | `src/components/HomeworkSheet.tsx` | le formulaire d'un devoir |
 | `src/components/CompareGrid.tsx` | les deux emplois du temps, colonne contre colonne |
 | `src/components/CourseBlock.tsx` | une case de cours, repliée ou agrandie |
-| `src/app.css` | toute la feuille de style : jetons, thèmes, base, mise en page, composants |
+| `src/lib/ui.ts` | les classes Tailwind des éléments répétés : boutons, puces, cartes, champs |
+| `src/app.css` | jetons, thèmes, base, et les quelques utilitaires calculés sur des variables |
 | `public/sw.js` | service worker (coquille + données hors ligne) |
 
 ## Style
 
-Le style tient dans un seul fichier, `src/app.css`, découpé en cinq sections :
-jetons (couleurs, rayons, ombres, tailles), thèmes clair et sombre — un simple
-jeu de jetons réécrits —, base, mise en page, puis un bloc par composant. Les
-composants ne portent que des classes sémantiques (`day-card`, `course-row`,
-`badge badge--kind`) : aucune valeur arbitraire dans le balisage, aucune couleur
-écrite ailleurs que dans les jetons.
+Le style s'écrit en classes Tailwind, dans le JSX. Les éléments qui reviennent
+d'une page à l'autre (boutons, puces, pastilles, cartes, champs) ont leurs
+classes rassemblées dans `src/lib/ui.ts`. `src/app.css` ne garde que les jetons
+du bloc `@theme` (couleurs, rayons, ombres, espacements `edge`/`gap`/`overlap`),
+les thèmes clair et sombre — un simple jeu de jetons réécrits —, la base, et
+quelques `@utility` pour ce que les classes ne savent pas dire : la zone qui
+défile (`timetable`) et ses en-têtes collants (`sticky-head`), les filets
+horaires, le dégradé du bandeau, la teinte d'un créneau selon sa nature. Aucune
+couleur n'est écrite ailleurs que dans les jetons.
 
 Le mouvement ne passe pas par des animations CSS dès qu'un doigt peut s'en
 saisir : un `@keyframes` a une durée écrite d'avance et ne se rattrape pas en

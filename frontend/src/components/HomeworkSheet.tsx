@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createSignal, on, type Component } from 'solid-js';
-import { Link2Off, X } from 'lucide-solid';
+import { Link2Off } from 'lucide-solid';
 
 import { ApiError } from '../lib/api';
 import {
@@ -13,7 +13,8 @@ import {
 } from '../lib/homework';
 import { settings } from '../lib/settings';
 import { longDate } from '../lib/time';
-import { Sheet } from './Sheet';
+import { button, chip, field, fieldLabel, fieldRow, input, notice, optionHint } from '../lib/ui';
+import { Sheet, SheetHeader } from './Sheet';
 
 interface Props {
   open: boolean;
@@ -105,18 +106,13 @@ export const HomeworkSheet: Component<Props> = (props) => {
 
   return (
     <Sheet open={props.open} onClose={props.onClose} label="Noter un devoir">
-      <header class="sheet__header">
-        <h2 class="sheet__title">{props.item ? 'Corriger le devoir' : 'Noter un devoir'}</h2>
-        <button type="button" class="button" onClick={props.onClose} aria-label="Fermer">
-          <X size={16} aria-hidden="true" />
-        </button>
-      </header>
+      <SheetHeader title={props.item ? 'Corriger le devoir' : 'Noter un devoir'} onClose={props.onClose} />
 
       <form onSubmit={save}>
-        <section class="field">
-          <h3 class="field__label">À faire</h3>
+        <section class={field}>
+          <h3 class={fieldLabel}>À faire</h3>
           <input
-            class="input input--block"
+            class={input({ block: true })}
             type="text"
             required
             maxLength={200}
@@ -126,11 +122,11 @@ export const HomeworkSheet: Component<Props> = (props) => {
           />
         </section>
 
-        <section class="field">
-          <h3 class="field__label">Matière et échéance</h3>
-          <div class="field__row">
+        <section class={field}>
+          <h3 class={fieldLabel}>Matière et échéance</h3>
+          <div class={fieldRow}>
             <input
-              class="input"
+              class={input()}
               type="text"
               maxLength={16}
               placeholder="R1.05"
@@ -139,7 +135,7 @@ export const HomeworkSheet: Component<Props> = (props) => {
               onInput={(event) => setResource(event.currentTarget.value)}
             />
             <input
-              class="input"
+              class={input()}
               type="date"
               aria-label="Date de rendu"
               value={due()}
@@ -148,14 +144,14 @@ export const HomeworkSheet: Component<Props> = (props) => {
           </div>
         </section>
 
-        <section class="field">
-          <h3 class="field__label">Qui le voit</h3>
-          <div class="field__row">
+        <section class={field}>
+          <h3 class={fieldLabel}>Qui le voit</h3>
+          <div class={fieldRow}>
             <For each={choices(settings().year, settings().group)}>
               {(choice) => (
                 <button
                   type="button"
-                  class="chip"
+                  class={chip}
                   aria-pressed={same(audience(), choice.audience)}
                   onClick={() => setAudience(choice.audience)}
                 >
@@ -164,7 +160,7 @@ export const HomeworkSheet: Component<Props> = (props) => {
               )}
             </For>
           </div>
-          <p class="option__hint">
+          <p class={optionHint}>
             {audience().kind === 'personal'
               ? 'Personne d’autre ne le verra.'
               : 'Il apparaîtra chez les autres une fois que l’un d’eux l’aura confirmé.'}
@@ -173,13 +169,13 @@ export const HomeworkSheet: Component<Props> = (props) => {
 
         <Show when={course()}>
           {(linked) => (
-            <section class="field">
-              <h3 class="field__label">Cours rattaché</h3>
-              <div class="homework__linked">
+            <section class={field}>
+              <h3 class={fieldLabel}>Cours rattaché</h3>
+              <div class="flex items-center justify-between gap-2 rounded-control border border-line bg-elevated px-2.5 py-2 text-sm first-letter:uppercase">
                 <span>{`${longDate(linked().date)} à ${linked().start}`}</span>
                 <button
                   type="button"
-                  class="button"
+                  class={button.plain}
                   onClick={() => setCourse(null)}
                   title="Détacher du cours"
                   aria-label="Détacher du cours"
@@ -191,10 +187,10 @@ export const HomeworkSheet: Component<Props> = (props) => {
           )}
         </Show>
 
-        <section class="field">
-          <h3 class="field__label">Précisions</h3>
+        <section class={field}>
+          <h3 class={fieldLabel}>Précisions</h3>
           <textarea
-            class="input input--block"
+            class={input({ block: true })}
             rows="3"
             maxLength={2000}
             placeholder="Page 42, à rendre sur Moodle…"
@@ -203,10 +199,10 @@ export const HomeworkSheet: Component<Props> = (props) => {
           />
         </section>
 
-        <Show when={error()}>{(message) => <p class="notice notice--error">{message()}</p>}</Show>
+        <Show when={error()}>{(message) => <p class={`${notice(true)} mt-5`}>{message()}</p>}</Show>
 
-        <div class="sheet__footer">
-          <button type="submit" class="button button--block button--primary" disabled={saving()}>
+        <div class="mt-6">
+          <button type="submit" class={`${button.primary} w-full`} disabled={saving()}>
             {saving() ? 'Enregistrement…' : props.item ? 'Enregistrer' : 'Noter le devoir'}
           </button>
         </div>

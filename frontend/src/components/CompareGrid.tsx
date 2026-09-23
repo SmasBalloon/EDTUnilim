@@ -3,6 +3,7 @@ import { For, Show, createMemo, type Component } from 'solid-js';
 import type { Course } from '../lib/api';
 import { gridBounds, packDay } from '../lib/layout';
 import { clock, humanDuration, isRunning, nowMinutes, shortDate, toMinutes, todayIso } from '../lib/time';
+import { cx, gridCorner, gridHead, hourMark, nowLine } from '../lib/ui';
 import { CourseBlock } from './CourseBlock';
 
 /** Un côté de la comparaison : son nom et ses cours de la semaine. */
@@ -109,8 +110,16 @@ export const CompareGrid: Component<Props> = (props) => {
   ];
 
   return (
+    // Une colonne par jour, coupée en deux : la classe de gauche, celle de
+    // droite. Elles se resserrent pour que la semaine entière tienne à l'écran
+    // sur un ordinateur ; un seul jour à l'écran, elles se partagent la largeur.
     <div
-      class="compare-grid"
+      class={cx(
+        'grid w-full [--column-min:clamp(5.5rem,26vw,6.25rem)] [--gutter:clamp(2.25rem,7vw,3.25rem)]',
+        'grid-cols-[var(--gutter)_repeat(var(--day-count),minmax(0,1fr))]',
+        'min-w-[calc(var(--gutter)+var(--day-count)*2*var(--column-min))]',
+        'group-data-single/week:min-w-full',
+      )}
       style={{
         '--day-count': String(props.days.length),
         '--hour-height': `${HOUR_HEIGHT}px`,
@@ -118,25 +127,42 @@ export const CompareGrid: Component<Props> = (props) => {
         '--body-pad': `${EDGE_PAD}px`,
       }}
     >
-      <div class="week-grid__corner" />
+      <div class={gridCorner} />
       <For each={props.days}>
         {(day) => (
-          <div class="compare-grid__head" classList={{ 'week-grid__day--today': day.date === today() }}>
-            <div class="week-grid__day-name">{day.name.toLowerCase()}</div>
-            <div class="week-grid__day-date">{shortDate(day.date)}</div>
-            <div class="compare-grid__names">
-              <span class="compare-grid__name">{props.left.label}</span>
-              <span class="compare-grid__name">{props.right.label}</span>
+          <div
+            class={cx(
+              gridHead,
+              'text-center',
+              day.date === today() && 'text-accent shadow-[inset_0_-2px_0_var(--color-accent)]',
+            )}
+          >
+            <div class="pt-2">
+              <div class="text-2xs font-semibold uppercase tracking-[0.04em]">{day.name.toLowerCase()}</div>
+              <div class="text-2xs text-muted">{shortDate(day.date)}</div>
+              {/* Les noms des deux classes tiennent au-dessus de leur colonne : on
+                  sait à qui appartient chaque cours sans remonter plus haut. */}
+              <div class="mt-1 flex">
+                <span class="min-w-0 flex-1 truncate py-0.5 px-1 text-2xs font-semibold text-muted">
+                  {props.left.label}
+                </span>
+                <span class="min-w-0 flex-1 truncate py-0.5 px-1 text-2xs font-semibold text-muted">
+                  {props.right.label}
+                </span>
+              </div>
             </div>
           </div>
         )}
       </For>
 
-      <div class="week-grid__gutter">
-        <div class="week-grid__hours">
+      <div class="sticky left-0 z-10 bg-bg">
+        <div class="relative h-(--body-height)">
           <For each={hours()}>
             {(hour) => (
-              <span class="week-grid__hour" style={{ top: `${offset(hour)}px` }}>
+              <span
+                class={hourMark}
+                style={{ top: `${offset(hour)}px` }}
+              >
                 {`${Math.floor(hour / 60)}h`}
               </span>
             )}
@@ -146,12 +172,12 @@ export const CompareGrid: Component<Props> = (props) => {
 
       <For each={props.days}>
         {(day) => (
-          <div class="compare-grid__body">
+          <div class="relative flex h-(--body-height) border-l border-line">
             {/* Les moments libres des deux côtés passent derrière les cours. */}
             <For each={sharedGaps(left().get(day.date) ?? [], right().get(day.date) ?? [])}>
               {(gap) => (
                 <div
-                  class="compare-grid__free"
+                  class="kind-sae pointer-events-none absolute inset-x-0 z-[1] grid place-items-center border-y border-dashed border-kind/45 bg-kind/12 text-2xs font-semibold text-kind-ink"
                   style={{ top: `${offset(gap[0])}px`, height: `${offset(gap[1]) - offset(gap[0])}px` }}
                 >
                   <Show when={gap[1] - gap[0] >= 45}>
@@ -163,9 +189,12 @@ export const CompareGrid: Component<Props> = (props) => {
 
             <For each={sides()}>
               {({ courses }) => (
+                // La séparation entre deux classes est plus discrète qu'entre deux jours.
                 <div
-                  class="compare-grid__side"
-                  classList={{ 'compare-grid__side--today': day.date === today() }}
+                  class={cx(
+                    'hour-lines relative min-w-0 flex-1 [&+&]:border-l [&+&]:border-dashed [&+&]:border-line/75',
+                    day.date === today() && 'bg-accent/7',
+                  )}
                 >
                   <For each={packDay(courses.get(day.date) ?? [])}>
                     {(placed) => {
@@ -193,7 +222,7 @@ export const CompareGrid: Component<Props> = (props) => {
                   <Show
                     when={day.date === today() && minutes() >= bounds().start && minutes() <= bounds().end}
                   >
-                    <div class="week-grid__now" style={{ top: `${offset(minutes())}px` }} />
+                    <div class={nowLine} style={{ top: `${offset(minutes())}px` }} />
                   </Show>
                 </div>
               )}

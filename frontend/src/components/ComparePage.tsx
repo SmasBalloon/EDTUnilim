@@ -8,19 +8,36 @@ import {
   on,
   type Component,
 } from 'solid-js';
-import { ArrowLeftRight, Plus, X } from 'lucide-solid';
+import { ArrowLeftRight, Plus } from 'lucide-solid';
 
 import { ApiError, fetchWeek, type Course, type Week, type YearSummary } from '../lib/api';
 import { groupBases, groupLabel, weekDays } from '../lib/groups';
 import { settings, update, type Side } from '../lib/settings';
 import { DAY_ORDER, dayIndex, periodLabel } from '../lib/time';
 import { useCompact } from '../lib/media';
+import {
+  button,
+  card,
+  centered,
+  chip,
+  field,
+  fieldLabel,
+  fieldRow,
+  note,
+  notice,
+  page,
+  pick,
+  pickName,
+  summary,
+} from '../lib/ui';
 import { CompareGrid } from './CompareGrid';
 import { DayTabs } from './DayTabs';
+import { Footer } from './Footer';
 import { GroupPicker } from './GroupPicker';
 import { Pager } from './Pager';
-import { Sheet } from './Sheet';
+import { Sheet, SheetHeader } from './Sheet';
 import { WeekBar } from './WeekBar';
+import { WeekFrame } from './WeekView';
 
 interface Props {
   years: YearSummary[];
@@ -149,16 +166,18 @@ export const ComparePage: Component<Props> = (props) => {
   );
 
   return (
-    <div class="compare">
-      <div class="summary">
-        <div class="card compare__sides">
+    <div class={page}>
+      <div class={summary}>
+        {/* Les deux classes se choisissent du même geste, et pèsent le même
+            poids à l'écran : rien ne dit laquelle est « la mienne ». */}
+        <div class={`${card} flex items-center gap-2 p-2`}>
           <For each={['left', 'right'] as Which[]}>
             {(which, position) => (
               <>
                 <Show when={position() === 1}>
                   <button
                     type="button"
-                    class="button button--round"
+                    class={button.round}
                     onClick={swap}
                     aria-label="Échanger les deux classes"
                     title="Échanger les deux classes"
@@ -168,7 +187,7 @@ export const ComparePage: Component<Props> = (props) => {
                 </Show>
                 <button
                   type="button"
-                  class="compare__pick"
+                  class={`${pick} min-w-0 flex-1 justify-center gap-1.5`}
                   onClick={() => setEditing(which)}
                   aria-label={`Changer la classe ${position() === 0 ? 'de gauche' : 'de droite'}`}
                 >
@@ -177,14 +196,14 @@ export const ComparePage: Component<Props> = (props) => {
                     fallback={
                       <>
                         <Plus size={16} aria-hidden="true" />
-                        <span class="compare__pick-name">Choisir une classe</span>
+                        <span class={pickName}>Choisir une classe</span>
                       </>
                     }
                   >
                     {(chosen) => (
                       <>
-                        <span class="compare__pick-name">{groupLabel(chosen().group)}</span>
-                        <span class="compare__pick-year">{`BUT ${chosen().year}`}</span>
+                        <span class={pickName}>{groupLabel(chosen().group)}</span>
+                        <span class="whitespace-nowrap text-xs text-muted">{`BUT ${chosen().year}`}</span>
                       </>
                     )}
                   </Show>
@@ -203,21 +222,21 @@ export const ComparePage: Component<Props> = (props) => {
         />
       </div>
 
-      <main class="app__timetable">
+      <main class="timetable">
         <Show
           when={side('right')}
           fallback={
-            <div class="centered">
+            <div class={centered}>
               <p>Choisis une seconde classe pour la mettre en regard de la tienne.</p>
             </div>
           }
         >
-          <Show when={days().length > 0} fallback={<div class="centered"><p>Chargement…</p></div>}>
+          <Show when={days().length > 0} fallback={<div class={centered}><p>Chargement…</p></div>}>
             <For each={troubles()}>
-              {(said) => <p class="notice compare__notice">{said}</p>}
+              {(said) => <p class={`${notice()} mx-edge mb-2.5`}>{said}</p>}
             </For>
 
-            <div class="week-view" classList={{ 'week-view--single': compact() }}>
+            <WeekFrame single={compact()}>
               <Show when={compact()}>
                 <DayTabs
                   days={days()}
@@ -236,21 +255,27 @@ export const ComparePage: Component<Props> = (props) => {
                   {(day) => grid([day])}
                 </Pager>
               </Show>
-            </div>
+            </WeekFrame>
           </Show>
         </Show>
       </main>
 
-      <footer class="app__footer">
-        <span class="compare__legend">
-          <span class="compare__legend-mark compare__legend-mark--together" aria-hidden="true" />
+      <Footer>
+        <span class="inline-flex items-center gap-1.5">
+          <span
+            class="size-3.5 rounded-[0.3125rem] border-[1.5px] border-dashed border-accent/65 bg-accent/10"
+            aria-hidden="true"
+          />
           ensemble
         </span>
-        <span class="compare__legend">
-          <span class="compare__legend-mark compare__legend-mark--free" aria-hidden="true" />
+        <span class="inline-flex items-center gap-1.5">
+          <span
+            class="kind-sae size-3.5 rounded-[0.3125rem] border border-dashed border-kind/55 bg-kind/14"
+            aria-hidden="true"
+          />
           libres tous les deux
         </span>
-      </footer>
+      </Footer>
 
       <Editor
         which={editing()}
@@ -299,23 +324,19 @@ const Editor: Component<EditorProps> = (props) => {
 
   return (
     <Sheet open={props.which !== null} onClose={props.onClose} label="Choisir une classe">
-      <header class="sheet__header">
-        <h2 class="sheet__title">
-          {props.which === 'right' ? 'Classe de droite' : 'Classe de gauche'}
-        </h2>
-        <button type="button" class="button" onClick={props.onClose} aria-label="Fermer">
-          <X size={16} aria-hidden="true" />
-        </button>
-      </header>
+      <SheetHeader
+        title={props.which === 'right' ? 'Classe de droite' : 'Classe de gauche'}
+        onClose={props.onClose}
+      />
 
-      <section class="field">
-        <h3 class="field__label">Année</h3>
-        <div class="field__row">
+      <section class={field}>
+        <h3 class={fieldLabel}>Année</h3>
+        <div class={fieldRow}>
           <For each={props.years}>
             {(item) => (
               <button
                 type="button"
-                class="chip"
+                class={chip}
                 aria-pressed={year() === item.year}
                 onClick={() => setYear(item.year)}
               >
@@ -326,10 +347,10 @@ const Editor: Component<EditorProps> = (props) => {
         </div>
       </section>
 
-      <section class="field">
+      <section class={field}>
         <Show
           when={structure()}
-          fallback={<p class="setup__note">{structure.error ? 'Semaine non publiée pour cette année.' : 'Lecture des groupes…'}</p>}
+          fallback={<p class={note}>{structure.error ? 'Semaine non publiée pour cette année.' : 'Lecture des groupes…'}</p>}
         >
           {(week) => (
             <GroupPicker

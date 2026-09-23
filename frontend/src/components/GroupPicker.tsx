@@ -1,6 +1,7 @@
 import { For, Show, createSignal, type Component } from 'solid-js';
 
 import { HALVES, baseOf, groupLabel, halfOf } from '../lib/groups';
+import { chip, fieldRow, label, note } from '../lib/ui';
 
 interface Props {
   /** Groupes principaux disponibles : `G1`, `G2`, … */
@@ -43,20 +44,20 @@ export const GroupPicker: Component<Props> = (props) => {
     <Show
       when={props.bases.length > 0}
       fallback={
-        <p class="setup__note">
+        <p class={note}>
           Aucun groupe dans cette semaine — essaie une autre semaine ou une autre année.
         </p>
       }
     >
-      <div class="picker">
-        <div class="picker__row">
-          <span class="picker__label">Groupe principal</span>
-          <div class="picker__options">
+      <div class="grid gap-4">
+        <div class="grid gap-2">
+          <span class={label}>Groupe principal</span>
+          <div class={fieldRow}>
             <For each={props.bases}>
               {(item) => (
                 <button
                   type="button"
-                  class="chip"
+                  class={chip}
                   aria-pressed={base() === item}
                   onClick={() => chooseBase(item)}
                 >
@@ -67,14 +68,14 @@ export const GroupPicker: Component<Props> = (props) => {
           </div>
         </div>
 
-        <div class="picker__row">
-          <span class="picker__label">Sous-groupe</span>
-          <div class="picker__options">
+        <div class="grid gap-2">
+          <span class={label}>Sous-groupe</span>
+          <div class={fieldRow}>
             <For each={HALVES}>
               {(item) => (
                 <button
                   type="button"
-                  class="chip"
+                  class={chip}
                   disabled={base() === null}
                   aria-pressed={half() === item}
                   onClick={() => chooseHalf(item)}

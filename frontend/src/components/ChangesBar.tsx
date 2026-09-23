@@ -1,12 +1,13 @@
 import { For, Show, createSignal, type Component } from 'solid-js';
-import { Check, X } from 'lucide-solid';
+import { Check } from 'lucide-solid';
 
 import type { Course } from '../lib/api';
 import { differences, type Change } from '../lib/changes';
 import { groupLabel } from '../lib/groups';
 import { KIND_LABEL } from '../lib/layout';
 import { humanDuration, longDate } from '../lib/time';
-import { Sheet } from './Sheet';
+import { button, cx, kindEdge } from '../lib/ui';
+import { Sheet, SheetHeader } from './Sheet';
 
 interface Props {
   changes: Change[];
@@ -18,6 +19,12 @@ const TITLES: Record<Change['kind'], string> = {
   added: 'Ajouté',
   removed: 'Annulé',
   modified: 'Modifié',
+};
+
+const TONES: Record<Change['kind'], string> = {
+  added: 'text-kind-sae',
+  removed: 'text-accent',
+  modified: 'text-kind-td',
 };
 
 /** « mardi 15 septembre, 10:00 – 12:00 » */
@@ -61,17 +68,20 @@ export const ChangesBar: Component<Props> = (props) => {
 
   return (
     <>
-      <div class="changes" role="status">
-        <span class="changes__dot" aria-hidden="true" />
-        <p class="changes__text">
+      <div
+        class="mx-edge mt-gap flex shrink-0 items-center gap-2.5 rounded-card border border-accent/40 bg-accent-wash py-2 pr-2.5 pl-3.5"
+        role="status"
+      >
+        <span class="size-2 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+        <p class="min-w-0 flex-1 text-sm">
           {`Cette semaine a changé depuis ta dernière visite : ${summarise(props.changes)}.`}
         </p>
-        <button type="button" class="button" onClick={() => setOpen(true)}>
+        <button type="button" class={button.plain} onClick={() => setOpen(true)}>
           Voir
         </button>
         <button
           type="button"
-          class="button button--round"
+          class={button.round}
           onClick={props.onSeen}
           title="Marquer comme vu"
           aria-label="Marquer comme vu"
@@ -81,26 +91,39 @@ export const ChangesBar: Component<Props> = (props) => {
       </div>
 
       <Sheet open={open()} onClose={() => setOpen(false)} label="Changements de la semaine">
-        <header class="sheet__header">
-          <h2 class="sheet__title">Ce qui a changé</h2>
-          <button type="button" class="button" onClick={() => setOpen(false)} aria-label="Fermer">
-            <X size={16} aria-hidden="true" />
-          </button>
-        </header>
+        <SheetHeader title="Ce qui a changé" onClose={() => setOpen(false)} />
 
-        <ul class="change-list">
+        <ul class="grid gap-2.5">
           <For each={props.changes}>
             {(change) => (
-              <li class={`change change--${change.kind} kind-${change.course.kind}`}>
-                <p class="change__head">
-                  <span class="change__kind">{TITLES[change.kind]}</span>
-                  <span class="change__when">{when(change.course)}</span>
+              <li
+                class={cx(
+                  `kind-${change.course.kind}`,
+                  'rounded-control border border-line bg-kind-tint px-3 py-2.5',
+                  kindEdge,
+                )}
+              >
+                <p class="flex items-baseline gap-2">
+                  <span class={cx('text-xs font-bold uppercase tracking-[0.04em]', TONES[change.kind])}>
+                    {TITLES[change.kind]}
+                  </span>
+                  {/* « mardi 15 septembre » : seule l'initiale se capitalise. */}
+                  <span class="text-[0.8125rem] text-muted tabular-nums first-letter:uppercase">
+                    {when(change.course)}
+                  </span>
                 </p>
-                <p class="change__what">{what(change.course)}</p>
+                <p
+                  class={cx(
+                    'mt-1 font-medium',
+                    change.kind === 'removed' && 'line-through decoration-accent/70',
+                  )}
+                >
+                  {what(change.course)}
+                </p>
 
                 <Show when={change.before}>
                   {(before) => (
-                    <ul class="change__details">
+                    <ul class="mt-1 list-disc pl-4 text-[0.8125rem] text-muted">
                       <For each={differences(before(), change.course)}>
                         {(detail) => <li>{detail}</li>}
                       </For>
@@ -109,17 +132,17 @@ export const ChangesBar: Component<Props> = (props) => {
                 </Show>
 
                 <Show when={change.kind !== 'modified'}>
-                  <p class="change__details">{humanDuration(change.course.duration_minutes)}</p>
+                  <p class="mt-1 text-[0.8125rem] text-muted">{humanDuration(change.course.duration_minutes)}</p>
                 </Show>
               </li>
             )}
           </For>
         </ul>
 
-        <div class="sheet__footer">
+        <div class="mt-6">
           <button
             type="button"
-            class="button button--block button--primary"
+            class={`${button.primary} w-full`}
             onClick={() => {
               props.onSeen();
               setOpen(false);

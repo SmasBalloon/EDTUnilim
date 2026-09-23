@@ -3,6 +3,7 @@ import { Show, createMemo, type Component } from 'solid-js';
 import type { Course } from '../lib/api';
 import { KIND_LABEL } from '../lib/layout';
 import { clock, isRunning, nowMinutes, relativeDayLabel, toMinutes, todayIso } from '../lib/time';
+import { card, cx } from '../lib/ui';
 
 interface State {
   /** Le cours en train de se dérouler, s'il y en a un. */
@@ -12,7 +13,7 @@ interface State {
 }
 
 const Accent: Component<{ children: string }> = (props) => (
-  <span class="accent">{props.children}</span>
+  <span class="font-medium text-accent">{props.children}</span>
 );
 
 /** Quand a lieu le prochain cours : « à 14:00 », « demain à 08:00 ». */
@@ -56,9 +57,12 @@ export const StatusCard: Component<{ courses: Course[] }> = (props) => {
   });
 
   return (
-    <div class="card status">
-      <p class="status__headline">
-        <span class="status__dot" classList={{ 'status__dot--idle': !state().running }} aria-hidden="true" />
+    <div class={`${card} px-3.5 py-2.5 text-sm`}>
+      <p class="flex items-center gap-2 font-medium">
+        <span
+          class={cx('size-2 shrink-0 rounded-full', state().running ? 'bg-accent' : 'bg-muted')}
+          aria-hidden="true"
+        />
         <Show
           when={state().running}
           fallback={
@@ -80,10 +84,10 @@ export const StatusCard: Component<{ courses: Course[] }> = (props) => {
 
       <Show
         when={state().next}
-        fallback={<p class="status__next">Plus rien cette semaine.</p>}
+        fallback={<p class="mt-1 text-[0.8125rem] text-muted">Plus rien cette semaine.</p>}
       >
         {(course) => (
-          <p class="status__next">
+          <p class="mt-1 text-[0.8125rem] text-muted">
             Prochain <Accent>{when(course(), todayIso(clock()))}</Accent> · {summarise(course())}
           </p>
         )}
