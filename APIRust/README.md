@@ -22,6 +22,7 @@ cargo run --release
 | `GET /api/v1/years` | années publiées et semaines disponibles |
 | `GET /api/v1/years/{year}/weeks` | semaines disponibles pour une année |
 | `GET /api/v1/years/{year}/weeks/{week}` | emploi du temps d'une semaine |
+| `GET /api/v1/years/{year}/calendar/{group}.ics` | abonnement iCalendar (webcal) d'un demi-groupe, toutes semaines publiées |
 | `GET /api/v1/resources` | référentiel des ressources et SAÉ |
 | `GET /api/v1/teachers` | enseignants connus, et leurs autres écritures |
 | `GET/POST /api/v1/homework` | devoirs visibles, et nouveau devoir |
@@ -38,6 +39,17 @@ L'emploi du temps accepte deux filtres cumulables :
 
 ```bash
 curl 'http://localhost:3000/api/v1/years/1/weeks/3?group=G1a&day=lundi'
+```
+
+L'abonnement `…/calendar/G1a.ics` (l'extension est facultative) rassemble toutes
+les semaines publiées de l'année en un seul calendrier `text/calendar`, que les
+agendas relisent d'eux-mêmes (`REFRESH-INTERVAL` de 3 h) : c'est l'adresse à
+ouvrir en `webcal://` ou à coller dans Google Agenda. Le site la propose dans ses
+réglages. Une semaine illisible est omise plutôt que de faire échouer le tout ;
+un groupe qui n'est pas un demi-groupe (`G1`) est refusé en `400`.
+
+```bash
+curl 'http://localhost:3000/api/v1/years/1/calendar/G1a.ics'
 ```
 
 ```json

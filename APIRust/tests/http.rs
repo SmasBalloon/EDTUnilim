@@ -206,3 +206,87 @@ async fn an_explicit_reload_asks_the_department_again() {
     response.assert_status_ok();
     response.assert_json_contains(&serde_json::json!({ "week": 3 }));
 }
+
+#[tokio::test]
+async fn serves_a_calendar_subscription_for_a_half_group() {
+    let upstream = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/A1/"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(r#"<a href="A1_S3.pdf">x</a>"#))
+        .mount(&upstream)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A1_S3))
+        .mount(&upstream)
+        .await;
+
+    let response = server_with(&upstream).get("/api/v1/years/1/calendar/g1A.ics").await;
+
+    response.assert_status_ok();
+    response.assert_header("content-type", "text/calendar; charset=utf-8");
+    response.assert_header("content-disposition", "inline; filename=\"edt-A1-G1a.ics\"");
+    let calendar = response.text();
+    assert!(calendar.contains("X-WR-CALNAME:EDT A1 G1A\r\n"));
+    assert!(calendar.contains("REFRESH-INTERVAL;VALUE=DURATION:PT3H"));
+    assert!(calendar.matches("BEGIN:VEVENT").count() > 0);
+}
+
+#[tokio::test]
+async fn a_calendar_accepts_the_group_without_extension() {
+    let upstream = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/A1/"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(""))
+        .mount(&upstream)
+        .await;
+
+    let response = server_with(&upstream).get("/api/v1/years/1/calendar/G2b").await;
+
+    response.assert_status_ok();
+    assert!(response.text().contains("X-WR-CALNAME:EDT A1 G2B\r\n"));
+}
+
+#[tokio::test]
+async fn a_calendar_leaves_out_a_week_that_cannot_be_read() {
+    let upstream = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/A1/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(r#"<a href="A1_S3.pdf">x</a><a href="A1_S4.pdf">y</a>"#),
+        )
+        .mount(&upstream)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A1_S3))
+        .mount(&upstream)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S4.pdf"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&upstream)
+        .await;
+
+    let response = server_with(&upstream).get("/api/v1/years/1/calendar/G1a.ics").await;
+
+    response.assert_status_ok();
+    assert!(response.text().matches("BEGIN:VEVENT").count() > 0);
+}
+
+#[tokio::test]
+async fn a_calendar_rejects_an_invalid_group_in_json() {
+    let response = server().get("/api/v1/years/1/calendar/G1.ics").await;
+
+    response.assert_status_bad_request();
+    response.assert_json_contains(&serde_json::json!({ "error": "bad_request" }));
+}
+
+#[tokio::test]
+async fn a_calendar_rejects_an_unknown_year_in_json() {
+    let response = server().get("/api/v1/years/9/calendar/G1a.ics").await;
+
+    response.assert_status_not_found();
+    response.assert_json_contains(&serde_json::json!({ "error": "unknown_year" }));
+}

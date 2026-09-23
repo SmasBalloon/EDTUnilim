@@ -18,6 +18,8 @@ pub async fn index() -> Json<Value> {
             "GET /api/v1/years": "années publiées et semaines disponibles",
             "GET /api/v1/years/{year}/weeks": "semaines disponibles pour une année",
             "GET /api/v1/years/{year}/weeks/{week}": "emploi du temps ; filtres ?group=G1a et ?day=lundi",
+            "GET /api/v1/years/{year}/calendar/{group}.ics":
+                "abonnement iCalendar (webcal) d'un demi-groupe, toutes semaines publiées",
             "GET /api/v1/resources": "référentiel des ressources et SAÉ",
             "GET /api/v1/teachers": "enseignants connus, et leurs autres écritures",
             "GET /api/v1/auth/login": "connexion avec Discord",

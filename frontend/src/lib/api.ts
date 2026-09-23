@@ -209,3 +209,16 @@ export function deleteAccount(): Promise<void> {
 
 /** Page d'autorisation Discord, via l'API qui prépare l'aller-retour. */
 export const LOGIN_URL = `${BASE}/api/v1/auth/login`;
+
+/**
+ * Adresse de l'abonnement iCalendar d'un demi-groupe, en `https://` : c'est
+ * elle qu'on colle dans Google Agenda (« À partir de l'URL »).
+ */
+export function calendarUrl(year: number, group: string): string {
+  return new URL(`${BASE}/api/v1/years/${year}/calendar/${group}.ics`, location.href).href;
+}
+
+/** La même en `webcal://` : un clic l'ouvre dans l'agenda du système. */
+export function webcalUrl(year: number, group: string): string {
+  return calendarUrl(year, group).replace(/^https?:/, 'webcal:');
+}

@@ -65,6 +65,13 @@ commun : `G1` correspond donc à `G1a` et `G1b`, `G1a` correspond aussi aux cour
 du groupe entier `G1`, mais `G1a` ne correspond pas à `G1b`. C'est ce qui permet
 à un étudiant de demander son demi-groupe et de recevoir sa journée complète.
 
+L'abonnement `GET /api/v1/years/{year}/calendar/{group}.ics` suit le même
+chemin pour chaque semaine publiée (`store.weeks` puis `store.timetable`), et
+confie le tout à `ics::subscription`, qui partage avec l'export joint aux
+messages privés (`ics::build`) l'écriture des créneaux. Les `UID` sont stables
+d'une version à l'autre : l'agenda qui relit le calendrier met à jour un cours
+déplacé au lieu de le dupliquer. Une semaine en erreur est journalisée et omise.
+
 ## 3. Récupération et caches
 
 Trois niveaux, du plus rapide au plus lent (`store.rs`) :

@@ -16,6 +16,7 @@ use crate::config::YEARS;
 use crate::discord::Discord;
 use crate::error::ApiError;
 use crate::homework::HomeworkStore;
+use crate::model::normalise_group;
 use crate::notify::Notifier;
 use crate::session::{self, Signer, OAUTH_COOKIE, OAUTH_TTL, SESSION_COOKIE, SESSION_TTL};
 use crate::users::{User, UserStore};
@@ -204,18 +205,6 @@ pub struct Updated {
     dm: Delivery,
 }
 
-/// `G1a`, `g12B` : un demi-groupe, remis à la casse du site.
-fn normalise_group(group: &str) -> Option<String> {
-    let group = group.trim();
-    let digits = group.get(1..group.len().checked_sub(1)?)?;
-    let valid = group.len() >= 3
-        && group.len() <= 4
-        && group.starts_with(['G', 'g'])
-        && digits.chars().all(|c| c.is_ascii_digit())
-        && group.ends_with(['a', 'b', 'A', 'B']);
-    valid.then(|| format!("G{digits}{}", group[group.len() - 1..].to_lowercase()))
-}
-
 /// Choisit la classe et les messages privés.
 pub async fn update(
     State(state): State<Arc<AppState>>,
@@ -284,20 +273,4 @@ pub async fn delete(State(state): State<Arc<AppState>>, headers: HeaderMap) -> R
     account.users.delete(&user.id).await?;
     info!(user = user.id, "compte supprimé");
     Ok((StatusCode::NO_CONTENT, [(SET_COOKIE, account.clear_session())]).into_response())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalises_half_groups() {
-        assert_eq!(normalise_group("G1a").as_deref(), Some("G1a"));
-        assert_eq!(normalise_group(" g12B ").as_deref(), Some("G12b"));
-        assert_eq!(normalise_group("G1"), None);
-        assert_eq!(normalise_group("G1c"), None);
-        assert_eq!(normalise_group("Gxa"), None);
-        assert_eq!(normalise_group("a"), None);
-        assert_eq!(normalise_group(""), None);
-    }
 }

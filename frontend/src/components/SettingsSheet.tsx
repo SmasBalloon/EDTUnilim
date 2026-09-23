@@ -1,4 +1,7 @@
-import { For, type Component } from 'solid-js';
+import { For, Show, createSignal, type Component } from 'solid-js';
+import { CalendarPlus, Check, Copy } from 'lucide-solid';
+
+import { calendarUrl, webcalUrl } from '../lib/api';
 
 import {
   DEFAULT_ACCENT,
@@ -165,6 +168,10 @@ export const SettingsSheet: Component<Props> = (props) => (
       />
     </section>
 
+    <Show when={settings().year !== null && settings().group !== null}>
+      <Subscribe year={settings().year ?? 0} group={settings().group ?? ''} />
+    </Show>
+
     <div class="mt-6">
       <button
         type="button"
@@ -177,3 +184,46 @@ export const SettingsSheet: Component<Props> = (props) => (
     </div>
   </Sheet>
 );
+
+/**
+ * L'abonnement de l'agenda : toutes les semaines publiées de la classe, que
+ * l'agenda relit de lui-même. Le clic ouvre l'agenda du système (`webcal:`) ;
+ * Google Agenda, lui, demande qu'on colle l'adresse.
+ */
+const Subscribe: Component<{ year: number; group: string }> = (props) => {
+  const [copied, setCopied] = createSignal(false);
+
+  const copy = async () => {
+    const url = calendarUrl(props.year, props.group);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Presse-papiers refusé (page non sécurisée, permission) : l'adresse
+      // reste lisible, à copier à la main.
+      window.prompt('Copie cette adresse :', url);
+    }
+  };
+
+  return (
+    <section class={field}>
+      <h3 class={fieldLabel}>Calendrier</h3>
+      <div class={fieldRow}>
+        <a class={button.primary} href={webcalUrl(props.year, props.group)}>
+          <CalendarPlus size={16} aria-hidden="true" />
+          S'abonner
+        </a>
+        <button type="button" class={button.plain} onClick={() => void copy()}>
+          <Show when={copied()} fallback={<Copy size={16} aria-hidden="true" />}>
+            <Check size={16} aria-hidden="true" />
+          </Show>
+          {copied() ? 'Adresse copiée' : 'Copier l’adresse'}
+        </button>
+      </div>
+      <p class={`${optionHint} mt-2`}>
+        {`Les cours de ${props.group.toUpperCase()} dans ton agenda, mis à jour tout seuls. Pour Google Agenda : copie l’adresse, puis Autres agendas › À partir de l’URL.`}
+      </p>
+    </section>
+  );
+};

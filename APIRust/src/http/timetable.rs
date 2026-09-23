@@ -3,16 +3,18 @@
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
-use axum::http::header::CACHE_CONTROL;
+use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use tracing::warn;
 
 use crate::config::YEARS;
 use crate::error::ApiError;
-use crate::model::{Course, Period};
+use crate::ics;
+use crate::model::{normalise_group, Course, Period};
 use crate::upstream::week_url;
 
 use super::{AppState, PathParams};
@@ -121,6 +123,40 @@ pub async fn week(
     };
 
     Ok(([(CACHE_CONTROL, CACHE_POLICY)], Json(body)).into_response())
+}
+
+/// Calendrier d'abonnement d'un demi-groupe : toutes les semaines publiées de
+/// l'année, relu par l'agenda à son rythme (`webcal://…/calendar/G1a.ics`).
+///
+/// Une semaine illisible ou disparue est laissée de côté plutôt que de faire
+/// échouer tout le calendrier : l'agenda garderait sinon une version périmée.
+pub async fn calendar(
+    State(state): State<Arc<AppState>>,
+    PathParams((year, file)): PathParams<(u8, String)>,
+) -> Result<Response, ApiError> {
+    let raw = file.strip_suffix(".ics").unwrap_or(&file);
+    let group =
+        normalise_group(raw).ok_or_else(|| ApiError::BadRequest(format!("groupe invalide : {raw}")))?;
+
+    let mut entries = Vec::new();
+    for &week in state.store.weeks(year).await?.iter() {
+        match state.store.timetable(year, week).await {
+            Ok(entry) => entries.push(entry),
+            Err(error) => warn!(%error, year, week, "semaine absente du calendrier"),
+        }
+    }
+
+    let body = ics::subscription(year, entries.iter().map(|entry| &entry.timetable), &group);
+    let disposition = format!("inline; filename=\"edt-A{year}-{group}.ics\"");
+    Ok((
+        [
+            (CONTENT_TYPE, "text/calendar; charset=utf-8".to_owned()),
+            (CONTENT_DISPOSITION, disposition),
+            (CACHE_CONTROL, CACHE_POLICY.to_owned()),
+        ],
+        body,
+    )
+        .into_response())
 }
 
 fn matches_day(day: &str, wanted: &str) -> bool {

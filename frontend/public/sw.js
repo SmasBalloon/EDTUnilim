@@ -36,6 +36,8 @@ self.addEventListener('fetch', (event) => {
 
   // Connexion et compte : toujours le réseau, jamais de copie gardée.
   if (url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/v1/years')) return;
+  // L'abonnement iCalendar est lu par les agendas, pas par l'application.
+  if (url.pathname.includes('/calendar/')) return;
 
   // Données : réseau d'abord, cache en secours.
   if (url.pathname.startsWith('/api/')) {

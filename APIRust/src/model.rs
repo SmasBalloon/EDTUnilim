@@ -169,6 +169,18 @@ pub fn matches_group(group: &str, wanted: &str) -> bool {
         && group[..common].eq_ignore_ascii_case(&wanted[..common])
 }
 
+/// `G1a`, `g12B` : un demi-groupe, remis à la casse du site.
+pub fn normalise_group(group: &str) -> Option<String> {
+    let group = group.trim();
+    let digits = group.get(1..group.len().checked_sub(1)?)?;
+    let valid = group.len() >= 3
+        && group.len() <= 4
+        && group.starts_with(['G', 'g'])
+        && digits.chars().all(|c| c.is_ascii_digit())
+        && group.ends_with(['a', 'b', 'A', 'B']);
+    valid.then(|| format!("G{digits}{}", group[group.len() - 1..].to_lowercase()))
+}
+
 /// L'en-tête du document : semaine couverte et date de génération.
 #[derive(Debug, Clone, Serialize)]
 pub struct Period {
@@ -240,6 +252,17 @@ pub mod opt_iso_date {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalises_half_groups() {
+        assert_eq!(normalise_group("G1a").as_deref(), Some("G1a"));
+        assert_eq!(normalise_group(" g12B ").as_deref(), Some("G12b"));
+        assert_eq!(normalise_group("G1"), None);
+        assert_eq!(normalise_group("G1c"), None);
+        assert_eq!(normalise_group("Gxa"), None);
+        assert_eq!(normalise_group("a"), None);
+        assert_eq!(normalise_group(""), None);
+    }
 
     #[test]
     fn formats_clock_time() {
