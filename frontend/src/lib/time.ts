@@ -129,6 +129,32 @@ export async function resolveCurrentWeek(
   return candidate;
 }
 
+/**
+ * La semaine à montrer en arrivant. En semaine, c'est celle d'aujourd'hui ;
+ * le week-end, on regarde déjà vers lundi : le dimanche toujours, le samedi
+ * dès que le groupe n'a pas cours ce jour-là.
+ */
+export async function resolveShownWeek(
+  year: number,
+  summary: YearSummary,
+  group: string | null,
+  now: Date = new Date(),
+): Promise<number> {
+  const current = await resolveCurrentWeek(year, summary, now);
+  const weekday = now.getDay();
+  if (weekday >= 1 && weekday <= 5) return current;
+
+  if (weekday === 6) {
+    const week = await fetchWeek(year, current, group ?? undefined);
+    const today = todayIso(now);
+    if (week.courses.some((course) => course.date === today)) return current;
+  }
+
+  const monday = startOfDay(now);
+  monday.setDate(monday.getDate() + (weekday === 0 ? 1 : 2));
+  return resolveCurrentWeek(year, summary, monday);
+}
+
 /** `1h30`, `2h`, `45min` — durée écrite comme on la dit. */
 export function humanDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60);

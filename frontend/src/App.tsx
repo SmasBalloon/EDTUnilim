@@ -29,7 +29,7 @@ import { diff, recall, remember, slotKey, weekKey, type Change } from './lib/cha
 import { loadHomework, type Draft } from './lib/homework';
 import { groupBases, groupLabel, weekDays } from './lib/groups';
 import { downloadIcs } from './lib/ics';
-import { clock, greeting, periodLabel, resolveCurrentWeek } from './lib/time';
+import { clock, greeting, periodLabel, resolveShownWeek } from './lib/time';
 import { settings, update, type ViewMode } from './lib/settings';
 import { centered, cx, note, press, summary as headCards } from './lib/ui';
 import { AccountPage } from './components/AccountPage';
@@ -166,14 +166,17 @@ export function App() {
   const summary = createMemo(() => years()?.find((item) => item.year === settings().year));
   const weeks = () => summary()?.weeks ?? [];
 
-  /** Semaine contenant aujourd'hui, déduite des périodes publiées. */
+  /**
+   * Semaine contenant aujourd'hui, déduite des périodes publiées — ou déjà la
+   * suivante le week-end, quand il n'y a plus cours avant lundi.
+   */
   const [currentWeek] = createResource(
     () => {
-      const year = settings().year;
+      const { year, group } = settings();
       const found = summary();
-      return year !== null && found ? ({ year, summary: found } as const) : undefined;
+      return year !== null && found ? ({ year, group, summary: found } as const) : undefined;
     },
-    ({ year, summary: found }) => resolveCurrentWeek(year, found),
+    ({ year, group, summary: found }) => resolveShownWeek(year, found, group),
   );
 
   // La semaine affichée suit la semaine courante tant que rien n'a été choisi,
