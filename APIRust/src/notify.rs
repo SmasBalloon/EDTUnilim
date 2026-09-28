@@ -8,6 +8,8 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 use tracing::{info, warn};
 
 use crate::discord::{Attachment, Button, ButtonStyle, Discord, DiscordError};
@@ -18,6 +20,12 @@ use crate::users::{User, UserStore};
 
 /// Longueur maximale d'un message Discord.
 const MESSAGE_LIMIT: usize = 2000;
+
+/// Messages privés envoyés en même temps. Assez pour que toute une promo
+/// reçoive son emploi du temps dans la même poignée de secondes, assez peu
+/// pour rester sous la limite globale de Discord (50 requêtes par seconde,
+/// deux par message) ; un 429 éventuel est de toute façon réessayé.
+const PARALLEL_DELIVERIES: usize = 20;
 
 /// Ce qui distingue deux versions d'une même semaine.
 #[derive(Debug, Default)]
@@ -240,6 +248,13 @@ fn by_group(users: Vec<User>) -> BTreeMap<String, Vec<User>> {
     groups
 }
 
+/// Les mêmes messages et le même `.ics` pour tout un demi-groupe.
+struct Batch {
+    messages: Vec<String>,
+    file: Attachment,
+    users: Vec<User>,
+}
+
 /// Envoie les messages privés aux personnes abonnées.
 #[derive(Clone)]
 pub struct Notifier {
@@ -254,32 +269,30 @@ impl Notifier {
 
     /// Une nouvelle semaine : chaque abonné de l'année reçoit sa semaine.
     pub async fn week_published(&self, timetable: &Timetable) {
+        let mut batches = Vec::new();
         for (group, users) in by_group(self.users.subscribers(timetable.year).await) {
             if !timetable.courses.iter().any(|course| course.concerns(&group)) {
                 continue;
             }
-            let file = calendar(timetable, &group);
-            let message = published_message(timetable, &group);
-            for user in &users {
-                self.deliver(user, std::slice::from_ref(&message), &file).await;
-            }
+            let messages = vec![published_message(timetable, &group)];
+            batches.push(Batch { file: calendar(timetable, &group), messages, users });
         }
+        self.deliver_all(batches).await;
     }
 
     /// Une semaine republiée : seuls les groupes dont un cours a bougé sont prévenus.
     pub async fn week_changed(&self, before: &Timetable, after: &Timetable) {
+        let mut batches = Vec::new();
         for (group, users) in by_group(self.users.subscribers(after.year).await) {
             let changes = diff(before, after, &group);
             if changes.is_empty() {
                 continue;
             }
             info!(year = after.year, week = after.week, group, "changements signalés");
-            let file = calendar(after, &group);
             let messages = change_messages(after, &group, &changes);
-            for user in &users {
-                self.deliver(user, &messages, &file).await;
-            }
+            batches.push(Batch { file: calendar(after, &group), messages, users });
         }
+        self.deliver_all(batches).await;
     }
 
     /// Confirmation d'abonnement, avec la semaine en cours quand elle est connue.
@@ -381,6 +394,29 @@ impl Notifier {
             }
             if let Err(error) = self.discord.send_dm_with(&user.id, text, None, buttons.clone()).await {
                 warn!(%error, user = user.id, "message privé impossible");
+            }
+        }
+    }
+
+    /// Envoie chaque lot à tous ses destinataires, en parallèle : toute la
+    /// promo reçoit l'emploi du temps en même temps, pas au fil d'une file
+    /// d'attente où les derniers l'auraient plusieurs minutes après les premiers.
+    async fn deliver_all(&self, batches: Vec<Batch>) {
+        let slots = Arc::new(Semaphore::new(PARALLEL_DELIVERIES));
+        let mut deliveries = JoinSet::new();
+        for Batch { messages, file, users } in batches {
+            let content = Arc::new((messages, file));
+            for user in users {
+                let (notifier, content, slots) = (self.clone(), Arc::clone(&content), Arc::clone(&slots));
+                deliveries.spawn(async move {
+                    let _slot = slots.acquire_owned().await;
+                    notifier.deliver(&user, &content.0, &content.1).await;
+                });
+            }
+        }
+        while let Some(done) = deliveries.join_next().await {
+            if let Err(error) = done {
+                warn!(%error, "envoi d'un message privé interrompu");
             }
         }
     }
@@ -623,6 +659,26 @@ mod tests {
         let before = week(vec![course(600, "G1A", "104")]);
         bench.notifier.week_changed(&before, &before).await;
         bench.notifier.week_changed(&before, &week(vec![course(600, "G1A", "208")])).await;
+    }
+
+    #[tokio::test]
+    async fn sends_to_everyone_at_the_same_time() {
+        let bench = bench().await;
+        Mock::given(method("POST"))
+            .and(path("/channels/900/messages"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string("{}")
+                    .set_delay(std::time::Duration::from_millis(400)),
+            )
+            .expect(2)
+            .mount(&bench.server)
+            .await;
+
+        // L'un après l'autre, les deux envois prendraient au moins 800 ms.
+        let started = std::time::Instant::now();
+        bench.notifier.week_published(&week(vec![course(600, "G1A", "104")])).await;
+        assert!(started.elapsed() < std::time::Duration::from_millis(750), "{:?}", started.elapsed());
     }
 
     #[tokio::test]
