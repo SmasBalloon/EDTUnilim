@@ -7,19 +7,21 @@ mod meta;
 mod timetable;
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::extract::rejection::PathRejection;
-use axum::extract::{FromRequestParts, Path};
+use axum::extract::{FromRequestParts, Path, Request};
 use axum::http::request::Parts;
 use axum::http::StatusCode;
+use axum::middleware::{self, Next};
+use axum::response::Response;
 use axum::routing::{get, post, put};
 use axum::Router;
 use serde::de::DeserializeOwned;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
 use tower_http::timeout::TimeoutLayer;
-use tower_http::trace::TraceLayer;
+use tracing::Instrument;
 
 use crate::config::Config;
 use crate::error::ApiError;
@@ -90,9 +92,43 @@ pub fn router(config: &Config, store: Arc<Store>, account: Option<Arc<Account>>)
         .route("/api/v1/homework/{id}/done", put(homework::done))
         .route("/api/v1/discord/interactions", post(interactions::handle))
         .fallback(|| async { ApiError::UnknownRoute })
-        .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
         .layer(CorsLayer::permissive())
         .layer(TimeoutLayer::with_status_code(StatusCode::GATEWAY_TIMEOUT, REQUEST_TIMEOUT))
+        // En dernier, donc à l'extérieur : les 504 du délai sont journalisés aussi.
+        .layer(middleware::from_fn(log_request))
         .with_state(state)
+}
+
+/// Journalise chaque requête : méthode, chemin, statut, durée et client.
+///
+/// Seul le chemin est écrit, jamais la requête : le retour OAuth y porte un
+/// code d'autorisation. La sonde `/health` de Docker, toutes les 30 s, ne
+/// sort qu'en `debug`.
+async fn log_request(request: Request, next: Next) -> Response {
+    let started = Instant::now();
+    let method = request.method().clone();
+    let path = request.uri().path().to_owned();
+    // nginx relaie l'adresse réelle ; en direct, il n'y a rien à montrer.
+    let client = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(',').next())
+        .map_or_else(|| "-".to_owned(), |value| value.trim().to_owned());
+
+    // Les journaux écrits pendant le traitement portent la méthode et le chemin.
+    let span = tracing::info_span!("requête", %method, %path);
+    let response = next.run(request).instrument(span).await;
+
+    let status = response.status().as_u16();
+    let ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    if path == "/health" {
+        tracing::debug!(%method, %path, status, ms, "sonde de santé");
+    } else if response.status().is_server_error() {
+        tracing::error!(%method, %path, status, ms, %client, "requête servie");
+    } else {
+        tracing::info!(%method, %path, status, ms, %client, "requête servie");
+    }
+    response
 }

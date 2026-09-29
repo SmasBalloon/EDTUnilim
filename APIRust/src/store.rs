@@ -27,6 +27,22 @@ pub struct Entry {
     validators: Validators,
 }
 
+/// Bilan d'une revalidation périodique, pour les journaux.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct RefreshSummary {
+    /// Semaines en cache revérifiées auprès du département.
+    pub checked: usize,
+    pub updated: usize,
+    pub failed: usize,
+}
+
+/// Issue de la revalidation d'une semaine.
+enum Revalidation {
+    Unchanged,
+    Updated,
+    Failed,
+}
+
 /// Délai minimal entre deux revalidations demandées par un client : un bouton
 /// martelé ne doit pas se traduire en rafale de requêtes vers le département.
 const MIN_REVALIDATION: Duration = Duration::from_secs(30);
@@ -84,6 +100,7 @@ impl Store {
         }
 
         let weeks = Arc::new(self.upstream.list_weeks(year).await.map_err(ApiError::UpstreamUnavailable)?);
+        info!(year, count = weeks.len(), "index des semaines chargé");
         self.weeks.write().expect("cache empoisonné").insert(year, Arc::clone(&weeks));
         Ok(weeks)
     }
@@ -99,6 +116,7 @@ impl Store {
 
         let document = match self.upstream.fetch_week(year, week, &Validators::default()).await {
             Ok(Fetch::Fresh(document)) => {
+                info!(year, week, bytes = document.bytes.len(), "emploi du temps téléchargé");
                 self.write_to_disk(year, week, &document.bytes).await;
                 document
             }
@@ -117,14 +135,16 @@ impl Store {
             }
         };
 
-        self.store(year, week, document)
+        let entry = self.store(year, week, document)?;
+        debug!(year, week, courses = entry.timetable.courses.len(), "emploi du temps analysé");
+        Ok(entry)
     }
 
     /// Revalide tout ce qui est en cache et réanalyse ce qui a changé.
     ///
     /// Quand les changements sont signalés, toutes les semaines publiées sont
     /// suivies, et pas seulement celles qu'un client a déjà consultées.
-    pub async fn refresh(&self) {
+    pub async fn refresh(&self) -> RefreshSummary {
         for year in YEARS {
             let known = self.weeks.read().expect("cache empoisonné").get(&year).cloned();
             self.refresh_weeks(year).await;
@@ -135,9 +155,15 @@ impl Store {
 
         let cached: Vec<(u8, u8)> =
             self.timetables.read().expect("cache empoisonné").keys().copied().collect();
+        let mut summary = RefreshSummary { checked: cached.len(), ..RefreshSummary::default() };
         for (year, week) in cached {
-            self.refresh_timetable(year, week).await;
+            match self.refresh_timetable(year, week).await {
+                Revalidation::Unchanged => {}
+                Revalidation::Updated => summary.updated += 1,
+                Revalidation::Failed => summary.failed += 1,
+            }
         }
+        summary
     }
 
     /// Revalide à la demande d'un client l'index d'une année, sans attendre
@@ -171,6 +197,7 @@ impl Store {
     async fn refresh_weeks(&self, year: u8) {
         match self.upstream.list_weeks(year).await {
             Ok(weeks) => {
+                debug!(year, count = weeks.len(), "index des semaines revalidé");
                 self.weeks.write().expect("cache empoisonné").insert(year, Arc::new(weeks));
             }
             Err(error) => warn!(%error, year, "index des semaines indisponible"),
@@ -197,6 +224,7 @@ impl Store {
             }
             match self.timetable(year, week).await {
                 Ok(entry) if published => {
+                    info!(year, week, "nouvelle semaine publiée");
                     if let Some(notifier) = &self.notifier {
                         notifier.week_published(&entry.timetable).await;
                     }
@@ -215,27 +243,45 @@ impl Store {
     }
 
     /// Relit une semaine déjà en cache ; sans effet si elle n'y est pas.
-    async fn refresh_timetable(&self, year: u8, week: u8) {
+    async fn refresh_timetable(&self, year: u8, week: u8) -> Revalidation {
         let Some(previous) = self.timetables.read().expect("cache empoisonné").get(&(year, week)).cloned()
         else {
-            return;
+            return Revalidation::Unchanged;
         };
 
         match self.upstream.fetch_week(year, week, &previous.validators).await {
-            Ok(Fetch::Unchanged) => debug!(year, week, "emploi du temps inchangé"),
+            Ok(Fetch::Unchanged) => {
+                debug!(year, week, "emploi du temps inchangé");
+                Revalidation::Unchanged
+            }
             Ok(Fetch::Fresh(document)) => {
+                let bytes = document.bytes.len();
                 self.write_to_disk(year, week, &document.bytes).await;
                 match self.store(year, week, document) {
                     Ok(entry) => {
-                        info!(year, week, "emploi du temps mis à jour");
+                        info!(
+                            year,
+                            week,
+                            bytes,
+                            courses_before = previous.timetable.courses.len(),
+                            courses_after = entry.timetable.courses.len(),
+                            "emploi du temps mis à jour"
+                        );
                         if let Some(notifier) = &self.notifier {
                             notifier.week_changed(&previous.timetable, &entry.timetable).await;
                         }
+                        Revalidation::Updated
                     }
-                    Err(error) => warn!(%error, year, week, "nouvelle version illisible"),
+                    Err(error) => {
+                        warn!(%error, year, week, "nouvelle version illisible");
+                        Revalidation::Failed
+                    }
                 }
             }
-            Err(error) => warn!(%error, year, week, "revalidation impossible"),
+            Err(error) => {
+                warn!(%error, year, week, "revalidation impossible");
+                Revalidation::Failed
+            }
         }
     }
 
@@ -273,7 +319,10 @@ impl Store {
         upstream_error: ApiError,
     ) -> Result<upstream::Document, ApiError> {
         match tokio::fs::read(self.disk_path(year, week)).await {
-            Ok(bytes) => Ok(upstream::Document { bytes, validators: Validators::default() }),
+            Ok(bytes) => {
+                info!(year, week, "emploi du temps servi depuis le cache disque");
+                Ok(upstream::Document { bytes, validators: Validators::default() })
+            }
             Err(_) => Err(upstream_error),
         }
     }

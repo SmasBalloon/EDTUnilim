@@ -8,7 +8,7 @@ use reqwest::multipart::{Form, Part};
 use reqwest::{RequestBuilder, Response, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::config::DiscordConfig;
 
@@ -276,6 +276,7 @@ impl Discord {
                 return check(request.send().await?).await;
             };
             let response = copy.send().await?;
+            debug!(url = %response.url().path(), status = response.status().as_u16(), attempt, "appel à Discord");
             if response.status() == StatusCode::TOO_MANY_REQUESTS && attempt < RATE_LIMIT_RETRIES {
                 attempt += 1;
                 wait_rate_limit(response).await;

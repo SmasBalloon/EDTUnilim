@@ -7,10 +7,11 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::discord::{Attachment, Button, ButtonStyle, Discord, DiscordError};
 use crate::homework::Homework;
@@ -388,20 +389,31 @@ impl Notifier {
 
     /// Écrit à la classe visée par un devoir, sauf à celui qui l'a noté.
     async fn to_class(&self, item: &Homework, text: &str, buttons: Vec<Button>) {
+        let (mut sent, mut failed) = (0, 0);
         for user in self.users.subscribers(item.year).await {
             if user.id == item.author || !item.visible_to(&user) {
                 continue;
             }
-            if let Err(error) = self.discord.send_dm_with(&user.id, text, None, buttons.clone()).await {
-                warn!(%error, user = user.id, "message privé impossible");
+            match self.discord.send_dm_with(&user.id, text, None, buttons.clone()).await {
+                Ok(()) => sent += 1,
+                Err(error) => {
+                    failed += 1;
+                    warn!(%error, user = user.id, "message privé impossible");
+                }
             }
         }
+        info!(id = item.id, sent, failed, "devoir annoncé à la classe");
     }
 
     /// Envoie chaque lot à tous ses destinataires, en parallèle : toute la
     /// promo reçoit l'emploi du temps en même temps, pas au fil d'une file
     /// d'attente où les derniers l'auraient plusieurs minutes après les premiers.
     async fn deliver_all(&self, batches: Vec<Batch>) {
+        if batches.is_empty() {
+            return;
+        }
+        let started = Instant::now();
+        let groups = batches.len();
         let slots = Arc::new(Semaphore::new(PARALLEL_DELIVERIES));
         let mut deliveries = JoinSet::new();
         for Batch { messages, file, users } in batches {
@@ -410,26 +422,41 @@ impl Notifier {
                 let (notifier, content, slots) = (self.clone(), Arc::clone(&content), Arc::clone(&slots));
                 deliveries.spawn(async move {
                     let _slot = slots.acquire_owned().await;
-                    notifier.deliver(&user, &content.0, &content.1).await;
+                    notifier.deliver(&user, &content.0, &content.1).await
                 });
             }
         }
+        let (mut sent, mut failed) = (0, 0);
         while let Some(done) = deliveries.join_next().await {
-            if let Err(error) = done {
-                warn!(%error, "envoi d'un message privé interrompu");
+            match done {
+                Ok(true) => sent += 1,
+                Ok(false) => failed += 1,
+                Err(error) => {
+                    failed += 1;
+                    warn!(%error, "envoi d'un message privé interrompu");
+                }
             }
         }
+        info!(
+            groups,
+            sent,
+            failed,
+            ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            "messages privés distribués"
+        );
     }
 
-    /// Envoie les messages, le fichier joint au dernier.
-    async fn deliver(&self, user: &User, messages: &[String], file: &Attachment) {
+    /// Envoie les messages, le fichier joint au dernier ; vrai si tout est parti.
+    async fn deliver(&self, user: &User, messages: &[String], file: &Attachment) -> bool {
         for (index, message) in messages.iter().enumerate() {
             let attachment = (index + 1 == messages.len()).then_some(file);
             if let Err(error) = self.discord.send_dm(&user.id, message, attachment).await {
                 warn!(%error, user = user.id, "message privé impossible");
-                return;
+                return false;
             }
         }
+        debug!(user = user.id, messages = messages.len(), "message privé envoyé");
+        true
     }
 }
 

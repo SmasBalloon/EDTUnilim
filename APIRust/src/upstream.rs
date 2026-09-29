@@ -1,9 +1,10 @@
 //! Accès au serveur du département, qui publie un PDF par année et par semaine.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use reqwest::header::{ETAG, IF_MODIFIED_SINCE, IF_NONE_MATCH, LAST_MODIFIED};
 use reqwest::StatusCode;
+use tracing::debug;
 
 /// Ce qui permet de savoir si un PDF a changé sans le retélécharger.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -42,14 +43,10 @@ impl Upstream {
 
     /// Numéros de semaine publiés pour une année, par ordre croissant.
     pub async fn list_weeks(&self, year: u8) -> Result<Vec<u8>, reqwest::Error> {
-        let index = self
-            .client
-            .get(format!("{}/A{year}/", self.base_url))
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await?;
+        let started = Instant::now();
+        let response = self.client.get(format!("{}/A{year}/", self.base_url)).send().await?;
+        debug!(year, status = response.status().as_u16(), ms = elapsed_ms(started), "index amont");
+        let index = response.error_for_status()?.text().await?;
 
         let mut weeks: Vec<u8> = parse_week_links(&index, year);
         weeks.sort_unstable();
@@ -68,7 +65,9 @@ impl Upstream {
             request = request.header(IF_MODIFIED_SINCE, date);
         }
 
+        let started = Instant::now();
         let response = request.send().await?;
+        debug!(year, week, status = response.status().as_u16(), ms = elapsed_ms(started), "PDF amont");
         if response.status() == StatusCode::NOT_MODIFIED {
             return Ok(Fetch::Unchanged);
         }
@@ -81,6 +80,10 @@ impl Upstream {
 
         Ok(Fetch::Fresh(Document { bytes: response.bytes().await?.to_vec(), validators }))
     }
+}
+
+fn elapsed_ms(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
 pub fn week_url(base_url: &str, year: u8, week: u8) -> String {

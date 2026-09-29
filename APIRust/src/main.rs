@@ -1,7 +1,8 @@
 //! Point d'entrée du service.
 
+use std::io::IsTerminal;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::net::TcpListener;
 use tokio::signal;
@@ -22,14 +23,31 @@ use edt_unilim_api::users::UserStore;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_env("EDT_LOG").unwrap_or_else(|_| EnvFilter::new("info")))
+        // Pas de codes couleur dans `docker logs` ni dans un fichier.
+        .with_ansi(std::io::stdout().is_terminal())
         .init();
 
     let config = Config::from_env()?;
+    info!(
+        version = env!("CARGO_PKG_VERSION"),
+        upstream = %config.upstream,
+        refresh_s = config.refresh_interval.as_secs(),
+        upstream_timeout_s = config.upstream_timeout.as_secs(),
+        cache_dir = %config.cache_dir.display(),
+        state_dir = %config.state_dir.display(),
+        discord = config.discord.is_some(),
+        "configuration chargée"
+    );
     let mut store = Store::new(&config)?;
     let mut account = None;
     if let Some(discord_config) = &config.discord {
         let users = Arc::new(UserStore::open(&config.state_dir).await?);
         let homework = Arc::new(HomeworkStore::open(&config.state_dir).await?);
+        info!(
+            subscribers = users.subscribers_all().await.len(),
+            homework = homework.all().await.len(),
+            "comptes et devoirs chargés"
+        );
         let discord = Discord::new(discord_config.clone())?;
         let notifier = Notifier::new(discord.clone(), Arc::clone(&users));
         store = store.with_notifier(notifier.clone());
@@ -113,6 +131,7 @@ async fn reminder_loop(homework: Arc<HomeworkStore>, users: Arc<UserStore>, noti
 
         let tomorrow = now.date().next_day().unwrap_or(now.date());
         let items = homework.all().await;
+        let mut reminded = 0;
         for user in users.subscribers_all().await {
             let due: Vec<&edt_unilim_api::homework::Homework> = items
                 .iter()
@@ -123,8 +142,12 @@ async fn reminder_loop(homework: Arc<HomeworkStore>, users: Arc<UserStore>, noti
                         && item.visible_to(&user)
                 })
                 .collect();
+            if !due.is_empty() {
+                reminded += 1;
+            }
             notifier.homework_due_tomorrow(&user, &due).await;
         }
+        info!(reminded, %tomorrow, "rappels de devoirs envoyés");
 
         // Le ménage du soir : les devoirs rendus depuis un mois s'effacent.
         let limit = now.date() - time::Duration::days(KEEP_DAYS);
@@ -143,7 +166,15 @@ async fn refresh_loop(store: Arc<Store>, interval: Duration) {
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         ticker.tick().await;
-        store.refresh().await;
+        let started = Instant::now();
+        let summary = store.refresh().await;
+        info!(
+            checked = summary.checked,
+            updated = summary.updated,
+            failed = summary.failed,
+            ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            "revalidation périodique terminée"
+        );
     }
 }
 
@@ -167,7 +198,7 @@ async fn shutdown_signal() {
     let terminate = std::future::pending::<()>();
 
     tokio::select! {
-        () = interrupt => {},
-        () = terminate => {},
+        () = interrupt => info!("Ctrl+C reçu, arrêt en cours"),
+        () = terminate => info!("SIGTERM reçu, arrêt en cours"),
     }
 }
