@@ -4,7 +4,7 @@
 //! publie par demi-groupe, qui donnent la même semaine sous une autre forme.
 
 use edt_unilim_api::model::{Course, CourseKind};
-use edt_unilim_api::pdf;
+use edt_unilim_api::{conflicts, pdf};
 
 const A1_S3: &[u8] = include_bytes!("fixtures/A1_S3.pdf");
 const A3_S2: &[u8] = include_bytes!("fixtures/A3_S2.pdf");
@@ -108,4 +108,16 @@ fn keeps_courses_ordered_and_consistent() {
 #[test]
 fn rejects_documents_that_are_not_timetables() {
     assert!(pdf::parse(b"pas un PDF", 1, 1).is_err());
+}
+
+#[test]
+fn finds_no_room_conflict_in_real_weeks() {
+    // Les cases d'une même séance et les salles réunies (`108-9`, `111-2`) ne
+    // doivent pas passer pour des salles réservées deux fois.
+    let first = pdf::parse(A1_S3, 1, 3).expect("PDF analysable");
+    let third = pdf::parse(A3_S2, 3, 2).expect("PDF analysable");
+    assert!(third.courses.iter().any(|course| course.room.as_deref() == Some("111-2")));
+    for timetables in [vec![&first], vec![&third], vec![&first, &third]] {
+        assert!(conflicts::find(&timetables).is_empty());
+    }
 }

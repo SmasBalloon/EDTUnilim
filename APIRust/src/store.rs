@@ -226,7 +226,7 @@ impl Store {
                 Ok(entry) if published => {
                     info!(year, week, "nouvelle semaine publiée");
                     if let Some(notifier) = &self.notifier {
-                        let others = self.same_dates(&entry.timetable).await;
+                        let others = self.same_dates(&entry.timetable);
                         let others: Vec<&Timetable> = others.iter().map(|other| &other.timetable).collect();
                         notifier.week_published(&entry.timetable, &others).await;
                     }
@@ -237,26 +237,15 @@ impl Store {
         }
     }
 
-    /// Les semaines des autres années qui couvrent les mêmes dates : les salles
-    /// sont partagées, leurs cours se rapprochent de ceux-ci.
+    /// Les semaines des autres années, déjà en cache, qui couvrent une partie
+    /// des mêmes dates : les salles sont partagées, leurs cours se rapprochent
+    /// de ceux-ci.
     ///
-    /// Le numéro de semaine n'est pas le même d'une année à l'autre ; ce sont
-    /// les dates de l'en-tête qui font foi. Une semaine illisible est ignorée.
-    async fn same_dates(&self, timetable: &Timetable) -> Vec<Arc<Entry>> {
-        let mut found = Vec::new();
-        for year in YEARS.into_iter().filter(|year| *year != timetable.year) {
-            let Ok(weeks) = self.weeks(year).await else { continue };
-            // Même numéro d'abord : c'est presque toujours la bonne.
-            let first = weeks.iter().copied().filter(|week| *week == timetable.week);
-            for week in first.chain(weeks.iter().copied().filter(|week| *week != timetable.week)) {
-                let Ok(entry) = self.timetable(year, week).await else { continue };
-                if entry.timetable.period.start == timetable.period.start {
-                    found.push(entry);
-                    break;
-                }
-            }
-        }
-        found
+    /// Seul le cache mémoire est lu : aucune requête vers le département, et
+    /// aucune semaine n'y entre avant que `watch_year` l'ait vue apparaître.
+    /// Quand les changements sont signalés, toutes les semaines publiées y sont.
+    fn same_dates(&self, timetable: &Timetable) -> Vec<Arc<Entry>> {
+        overlapping(self.timetables.read().expect("cache empoisonné").values(), timetable)
     }
 
     /// Reprend en mémoire un PDF déjà sur disque, sans validateurs : la
@@ -292,7 +281,7 @@ impl Store {
                             "emploi du temps mis à jour"
                         );
                         if let Some(notifier) = &self.notifier {
-                            let others = self.same_dates(&entry.timetable).await;
+                            let others = self.same_dates(&entry.timetable);
                             let others: Vec<&Timetable> =
                                 others.iter().map(|other| &other.timetable).collect();
                             notifier.week_changed(&previous.timetable, &entry.timetable, &others).await;
@@ -352,5 +341,77 @@ impl Store {
             }
             Err(_) => Err(upstream_error),
         }
+    }
+}
+
+/// Parmi `entries`, les semaines des autres années dont les dates recoupent
+/// celles de `timetable`. Le numéro de semaine n'est pas le même d'une année à
+/// l'autre ; ce sont les dates de l'en-tête qui font foi.
+fn overlapping<'a>(
+    entries: impl IntoIterator<Item = &'a Arc<Entry>>,
+    timetable: &Timetable,
+) -> Vec<Arc<Entry>> {
+    let period = &timetable.period;
+    entries
+        .into_iter()
+        .filter(|entry| {
+            let other = &entry.timetable;
+            other.year != timetable.year
+                && other.period.start <= period.end
+                && period.start <= other.period.end
+        })
+        .cloned()
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use time::macros::date;
+    use time::Date;
+
+    use super::*;
+    use crate::model::Period;
+
+    fn entry(year: u8, week: u8, start: Date, end: Date) -> Arc<Entry> {
+        Arc::new(Entry {
+            timetable: Timetable {
+                year,
+                week,
+                period: Period { week_number: None, start, end, label: String::new() },
+                courses: Vec::new(),
+            },
+            fetched_at: OffsetDateTime::UNIX_EPOCH,
+            validators: Validators::default(),
+        })
+    }
+
+    fn found(entries: &[Arc<Entry>], timetable: &Timetable) -> Vec<(u8, u8)> {
+        overlapping(entries, timetable).iter().map(|e| (e.timetable.year, e.timetable.week)).collect()
+    }
+
+    #[test]
+    fn finds_the_other_years_by_their_dates_not_their_week_number() {
+        let own = entry(1, 3, date!(2026 - 09 - 14), date!(2026 - 09 - 19));
+        let entries = [
+            entry(2, 3, date!(2026 - 09 - 07), date!(2026 - 09 - 12)),
+            entry(2, 4, date!(2026 - 09 - 14), date!(2026 - 09 - 19)),
+            entry(3, 2, date!(2026 - 09 - 14), date!(2026 - 09 - 19)),
+            entry(3, 3, date!(2026 - 09 - 21), date!(2026 - 09 - 26)),
+        ];
+        assert_eq!(found(&entries, &own.timetable), [(2, 4), (3, 2)]);
+    }
+
+    #[test]
+    fn finds_a_week_whose_header_starts_another_day() {
+        let own = entry(1, 3, date!(2026 - 09 - 14), date!(2026 - 09 - 19));
+        let entries = [entry(3, 2, date!(2026 - 09 - 15), date!(2026 - 09 - 18))];
+        assert_eq!(found(&entries, &own.timetable), [(3, 2)]);
+    }
+
+    #[test]
+    fn leaves_out_the_same_year_and_an_empty_cache() {
+        let own = entry(1, 3, date!(2026 - 09 - 14), date!(2026 - 09 - 19));
+        assert!(found(&[Arc::clone(&own)], &own.timetable).is_empty());
+        assert!(found(&[], &own.timetable).is_empty());
     }
 }
