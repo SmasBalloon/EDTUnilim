@@ -41,6 +41,7 @@ Découpage des modules :
 | `upstream.rs` | client HTTP vers le serveur du département |
 | `pdf/` | analyse du PDF (le cœur du projet) |
 | `model.rs` | types exposés dans le JSON |
+| `conflicts.rs` | salles réservées par deux cours qui se chevauchent, toutes années confondues, signalées avec les messages Discord |
 | `catalog.rs` | référentiel des ressources/SAÉ, embarqué dans le binaire |
 | `error.rs` | erreurs de l'API et leur rendu JSON |
 

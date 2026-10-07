@@ -226,13 +226,37 @@ impl Store {
                 Ok(entry) if published => {
                     info!(year, week, "nouvelle semaine publiée");
                     if let Some(notifier) = &self.notifier {
-                        notifier.week_published(&entry.timetable).await;
+                        let others = self.same_dates(&entry.timetable).await;
+                        let others: Vec<&Timetable> = others.iter().map(|other| &other.timetable).collect();
+                        notifier.week_published(&entry.timetable, &others).await;
                     }
                 }
                 Ok(_) => {}
                 Err(error) => warn!(%error, year, week, "semaine publiée illisible"),
             }
         }
+    }
+
+    /// Les semaines des autres années qui couvrent les mêmes dates : les salles
+    /// sont partagées, leurs cours se rapprochent de ceux-ci.
+    ///
+    /// Le numéro de semaine n'est pas le même d'une année à l'autre ; ce sont
+    /// les dates de l'en-tête qui font foi. Une semaine illisible est ignorée.
+    async fn same_dates(&self, timetable: &Timetable) -> Vec<Arc<Entry>> {
+        let mut found = Vec::new();
+        for year in YEARS.into_iter().filter(|year| *year != timetable.year) {
+            let Ok(weeks) = self.weeks(year).await else { continue };
+            // Même numéro d'abord : c'est presque toujours la bonne.
+            let first = weeks.iter().copied().filter(|week| *week == timetable.week);
+            for week in first.chain(weeks.iter().copied().filter(|week| *week != timetable.week)) {
+                let Ok(entry) = self.timetable(year, week).await else { continue };
+                if entry.timetable.period.start == timetable.period.start {
+                    found.push(entry);
+                    break;
+                }
+            }
+        }
+        found
     }
 
     /// Reprend en mémoire un PDF déjà sur disque, sans validateurs : la
@@ -268,7 +292,10 @@ impl Store {
                             "emploi du temps mis à jour"
                         );
                         if let Some(notifier) = &self.notifier {
-                            notifier.week_changed(&previous.timetable, &entry.timetable).await;
+                            let others = self.same_dates(&entry.timetable).await;
+                            let others: Vec<&Timetable> =
+                                others.iter().map(|other| &other.timetable).collect();
+                            notifier.week_changed(&previous.timetable, &entry.timetable, &others).await;
                         }
                         Revalidation::Updated
                     }
