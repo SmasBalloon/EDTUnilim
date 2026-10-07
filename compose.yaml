@@ -31,6 +31,8 @@ services:
       EDT_DISCORD_BOT_TOKEN: ${EDT_DISCORD_BOT_TOKEN:-}
       EDT_DISCORD_GUILD_ID: ${EDT_DISCORD_GUILD_ID:-}
       EDT_DISCORD_KNOWN_GUILD_IDS: ${EDT_DISCORD_KNOWN_GUILD_IDS:-}
+      # Comptes prévenus des salles réservées en double (vide : aucun envoi).
+      EDT_DISCORD_CONFLICT_RECIPIENTS: ${EDT_DISCORD_CONFLICT_RECIPIENTS:-429319137710440449,682531276078841881,391597830932004864}
       # Clé publique de l'application : elle allume les commandes slash du bot.
       EDT_DISCORD_PUBLIC_KEY: ${EDT_DISCORD_PUBLIC_KEY:-}
       EDT_SESSION_SECRET: ${EDT_SESSION_SECRET:-}

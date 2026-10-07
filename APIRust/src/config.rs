@@ -49,6 +49,9 @@ pub struct DiscordConfig {
     /// Serveurs où le bot se trouve déjà : leurs membres peuvent recevoir des
     /// messages privés sans être ajoutés à `guild_id`.
     pub known_guild_ids: Vec<String>,
+    /// Comptes prévenus en message privé des salles réservées par plusieurs
+    /// cours en même temps (enseignants, administration) ; vide, rien ne part.
+    pub conflict_recipients: Vec<String>,
     /// Clé de signature des cookies de session.
     pub session_secret: String,
     /// Clé publique de l'application Discord : sans elle, les commandes slash
@@ -64,6 +67,7 @@ impl std::fmt::Debug for DiscordConfig {
             .field("client_id", &self.client_id)
             .field("guild_id", &self.guild_id)
             .field("known_guild_ids", &self.known_guild_ids)
+            .field("conflict_recipients", &self.conflict_recipients)
             .field("api_base", &self.api_base)
             .field("slash_commands", &self.public_key.is_some())
             .finish_non_exhaustive()
@@ -142,9 +146,8 @@ fn discord() -> Result<Option<DiscordConfig>, ConfigError> {
         client_secret,
         bot_token,
         guild_id,
-        known_guild_ids: var("EDT_DISCORD_KNOWN_GUILD_IDS")
-            .map(|ids| ids.split(',').map(str::trim).filter(|id| !id.is_empty()).map(str::to_owned).collect())
-            .unwrap_or_default(),
+        known_guild_ids: ids("EDT_DISCORD_KNOWN_GUILD_IDS"),
+        conflict_recipients: ids("EDT_DISCORD_CONFLICT_RECIPIENTS"),
         session_secret,
         public_key: var("EDT_DISCORD_PUBLIC_KEY").map(|key| key.trim().to_owned()),
         api_base: var("EDT_DISCORD_API")
@@ -163,6 +166,13 @@ impl Config {
 
 fn var(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|value| !value.trim().is_empty())
+}
+
+/// Identifiants Discord séparés par des virgules.
+fn ids(name: &str) -> Vec<String> {
+    var(name)
+        .map(|ids| ids.split(',').map(str::trim).filter(|id| !id.is_empty()).map(str::to_owned).collect())
+        .unwrap_or_default()
 }
 
 fn duration(name: &'static str, default: Duration) -> Result<Duration, ConfigError> {
@@ -191,6 +201,7 @@ mod tests {
             "EDT_PUBLIC_URL",
             "EDT_DISCORD_API",
             "EDT_DISCORD_KNOWN_GUILD_IDS",
+            "EDT_DISCORD_CONFLICT_RECIPIENTS",
         ]
         .into_iter()
         .chain(DISCORD_VARS)
@@ -277,11 +288,13 @@ mod tests {
         }
         std::env::set_var("EDT_PUBLIC_URL", "https://edt.example/");
         std::env::set_var("EDT_DISCORD_KNOWN_GUILD_IDS", " 111, 222 ,");
+        std::env::set_var("EDT_DISCORD_CONFLICT_RECIPIENTS", "333");
 
         let config = Config::from_env().expect("configuration valide");
         let discord = config.discord.as_ref().expect("Discord configuré");
         assert_eq!(discord.api_base, DEFAULT_DISCORD_API);
         assert_eq!(discord.known_guild_ids, ["111", "222"]);
+        assert_eq!(discord.conflict_recipients, ["333"]);
         assert_eq!(config.public_url, "https://edt.example");
         assert!(config.is_https());
         assert!(!format!("{discord:?}").contains("client_secret"), "les secrets restent hors des journaux");

@@ -49,7 +49,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "comptes et devoirs chargés"
         );
         let discord = Discord::new(discord_config.clone())?;
-        let notifier = Notifier::new(discord.clone(), Arc::clone(&users));
+        let notifier = Notifier::new(discord.clone(), Arc::clone(&users))
+            .with_conflict_recipients(discord_config.conflict_recipients.clone());
         store = store.with_notifier(notifier.clone());
         tokio::spawn(reminder_loop(Arc::clone(&homework), Arc::clone(&users), notifier.clone()));
         // La seule connexion permanente du service : sans elle, le bot est là

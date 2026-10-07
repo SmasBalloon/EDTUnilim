@@ -201,6 +201,7 @@ async fn watching(server: &MockServer, cache_dir: &std::path::Path, state_dir: &
         bot_token: "bot".into(),
         guild_id: "7".into(),
         known_guild_ids: vec!["5".into()],
+        conflict_recipients: Vec::new(),
         session_secret: "s".repeat(32),
         public_key: None,
         api_base: format!("{}/discord", server.uri()),
@@ -350,4 +351,39 @@ async fn detects_a_change_made_while_the_service_was_stopped() {
     let state_dir = tempfile::tempdir().expect("répertoire temporaire");
     let store = watching(&server, cache_dir.path(), state_dir.path()).await;
     store.refresh().await;
+}
+
+#[tokio::test]
+async fn looks_for_room_conflicts_without_fetching_the_other_years() {
+    let server = MockServer::start().await;
+    // Les autres années ne sont pas en cache : les chercher interrogerait l'amont.
+    for year in ["/A2/", "/A3/"] {
+        Mock::given(method("GET"))
+            .and(path(year))
+            .respond_with(ResponseTemplate::new(200).set_body_string(""))
+            .expect(0)
+            .mount(&server)
+            .await;
+    }
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A1_S3).insert_header("etag", "\"v1\""))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/A1/A1_S3.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(A3_S2).insert_header("etag", "\"v2\""))
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    expect_dm(&server, "modifiée pour G1A", 1).await;
+
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let state_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let store = watching(&server, cache_dir.path(), state_dir.path()).await;
+    store.timetable(1, 3).await.expect("première version");
+    // Revalidation demandée par un client : la réponse ne doit pas attendre l'amont des autres années.
+    store.revalidate_timetable(1, 3).await;
 }

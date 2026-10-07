@@ -130,8 +130,13 @@ fn short_date(date: time::Date) -> String {
 
 /// `mar. 15/09 10:00–12:00`
 fn when(course: &Course) -> String {
+    format!("{} {}–{}", short_date_of(course), course.start, course.end)
+}
+
+/// `mar. 15/09`
+fn short_date_of(course: &Course) -> String {
     let day: String = course.day.to_lowercase().chars().take(3).collect();
-    format!("{day}. {} {}–{}", short_date(course.date), course.start, course.end)
+    format!("{day}. {}", short_date(course.date))
 }
 
 /// `TP R1.05 · G1A · salle 104 · Dupont M.`
@@ -139,7 +144,7 @@ fn what(course: &Course) -> String {
     what_with(course, true)
 }
 
-/// Comme [`what`], la salle en option : un conflit la nomme une fois pour tous ses cours.
+/// Comme [`what`], la salle en option : un conflit la nomme une fois pour ses cours.
 fn what_with(course: &Course, show_room: bool) -> String {
     let mut parts = vec![kind_label(course.kind).to_owned()];
     if let Some(label) = course.resource.as_ref().map(|r| r.code.clone()).or_else(|| course.title.clone()) {
@@ -204,35 +209,29 @@ pub fn change_messages(after: &Timetable, group: &str, changes: &Changes) -> Vec
     pack(lines)
 }
 
-/// Les salles réservées en double, une ligne par conflit et un cours par ligne
-/// (salle, cours, groupe, enseignant). Vide quand il n'y en a pas.
+/// Les salles réservées en double, une ligne par salle disputée et un cours
+/// par ligne (cours, groupe, enseignant). Vide quand il n'y en a pas.
 pub fn conflict_messages(conflicts: &[&Conflict]) -> Vec<String> {
     if conflicts.is_empty() {
         return Vec::new();
     }
-    let mut lines = vec!["🚨 **Salle réservée par deux cours en même temps**".to_owned()];
-    for conflict in conflicts {
-        lines.push(format!(
-            "⚠️ salle {} · {}\n   • {}\n   • {}",
-            conflict.room,
-            short_date_of(conflict.first.course),
-            booking_line(&conflict.first),
-            booking_line(&conflict.second),
-        ));
+    let mut lines = vec!["🚨 **Salle réservée par plusieurs cours en même temps**".to_owned()];
+    for overlap in conflicts::group(conflicts) {
+        let mut line = format!("⚠️ salle {} · {}", overlap.room, short_date_of(overlap.first().course));
+        for booking in &overlap.bookings {
+            line.push_str(&format!("\n   • {}", booking_line(booking, &overlap.room)));
+        }
+        lines.push(line);
     }
     pack(lines)
 }
 
-/// `mar. 15/09`
-fn short_date_of(course: &Course) -> String {
-    let day: String = course.day.to_lowercase().chars().take(3).collect();
-    format!("{day}. {}", short_date(course.date))
-}
-
-/// `10:00–12:00 · BUT 1 · TP R1.05 · G1A · Dupont M.` : la salle est dans le titre du conflit.
-fn booking_line(booking: &Booking) -> String {
+/// `10:00–12:00 · BUT 1 · TP R1.05 · G1A · Dupont M.` : la salle est dans le
+/// titre du conflit, et n'est répétée que si le cours en réunit plusieurs (`111-2`).
+fn booking_line(booking: &Booking, room: &str) -> String {
     let course = booking.course;
-    format!("{}–{} · BUT {} · {}", course.start, course.end, booking.year, what_with(course, false))
+    let show_room = course.room.as_deref().is_some_and(|label| conflicts::normalise_room(label) != room);
+    format!("{}–{} · BUT {} · {}", course.start, course.end, booking.year, what_with(course, show_room))
 }
 
 /// Annonce d'une semaine qui vient d'apparaître dans l'index.
@@ -311,8 +310,7 @@ fn by_group(users: Vec<User>) -> BTreeMap<String, Vec<User>> {
 /// Les mêmes messages et le même `.ics` pour tout un demi-groupe.
 struct Batch {
     messages: Vec<String>,
-    /// Absent quand le message ne concerne pas l'emploi du temps de ces personnes.
-    file: Option<Attachment>,
+    file: Attachment,
     users: Vec<User>,
 }
 
@@ -321,82 +319,85 @@ struct Batch {
 pub struct Notifier {
     discord: Discord,
     users: Arc<UserStore>,
+    /// Comptes Discord prévenus des salles réservées en double (enseignants,
+    /// administration) ; vide, rien n'est cherché ni envoyé.
+    conflict_recipients: Arc<[String]>,
 }
 
 impl Notifier {
     pub fn new(discord: Discord, users: Arc<UserStore>) -> Self {
-        Self { discord, users }
+        Self { discord, users, conflict_recipients: Arc::from([]) }
+    }
+
+    /// Prévient ces comptes Discord des salles réservées en double.
+    pub fn with_conflict_recipients(mut self, ids: Vec<String>) -> Self {
+        self.conflict_recipients = ids.into();
+        self
     }
 
     /// Une nouvelle semaine : chaque abonné de l'année reçoit sa semaine.
     ///
     /// `others` : les semaines des autres années aux mêmes dates, dont les
     /// salles sont partagées avec celle-ci. Les salles réservées en double sont
-    /// signalées à chaque groupe concerné, de n'importe quelle année.
+    /// signalées aux destinataires des conflits, pas aux abonnés.
     pub async fn week_published(&self, timetable: &Timetable, others: &[&Timetable]) {
-        let found = new_conflicts(timetable, others, None);
         let mut batches = Vec::new();
         for (group, users) in by_group(self.users.subscribers(timetable.year).await) {
             if !timetable.courses.iter().any(|course| course.concerns(&group)) {
                 continue;
             }
-            let mut messages = vec![published_message(timetable, &group)];
-            let concerned: Vec<&Conflict> =
-                found.iter().filter(|c| c.concerns(timetable.year, &group)).collect();
-            messages.extend(conflict_messages(&concerned));
-            batches.push(Batch { file: Some(calendar(timetable, &group)), messages, users });
+            let messages = vec![published_message(timetable, &group)];
+            batches.push(Batch { file: calendar(timetable, &group), messages, users });
         }
-        batches.extend(self.other_years(&found, timetable.year).await);
         self.deliver_all(batches).await;
+        self.report_conflicts(timetable, others, None).await;
     }
 
     /// Une semaine republiée : seuls les groupes dont un cours a bougé sont prévenus.
     ///
     /// Les salles doubles réservées par cette version et pas par la précédente
-    /// partent dans le même envoi, y compris pour un groupe dont aucun cours n'a
-    /// bougé mais qu'un cours déplacé chez un autre vient de mettre en conflit —
-    /// dans la même année ou dans une autre (`others`).
+    /// sont signalées aux destinataires des conflits, avec les autres années
+    /// (`others`).
     pub async fn week_changed(&self, before: &Timetable, after: &Timetable, others: &[&Timetable]) {
-        let found = new_conflicts(after, others, Some(before));
         let mut batches = Vec::new();
         for (group, users) in by_group(self.users.subscribers(after.year).await) {
             let changes = diff(before, after, &group);
-            let concerned: Vec<&Conflict> = found.iter().filter(|c| c.concerns(after.year, &group)).collect();
-            if changes.is_empty() && concerned.is_empty() {
+            if changes.is_empty() {
                 continue;
             }
-            info!(
-                year = after.year,
-                week = after.week,
-                group,
-                conflicts = concerned.len(),
-                "changements signalés"
-            );
-            let mut messages =
-                if changes.is_empty() { Vec::new() } else { change_messages(after, &group, &changes) };
-            messages.extend(conflict_messages(&concerned));
-            batches.push(Batch { file: Some(calendar(after, &group)), messages, users });
+            info!(year = after.year, week = after.week, group, "changements signalés");
+            let messages = change_messages(after, &group, &changes);
+            batches.push(Batch { file: calendar(after, &group), messages, users });
         }
-        batches.extend(self.other_years(&found, after.year).await);
         self.deliver_all(batches).await;
+        self.report_conflicts(after, others, Some(before)).await;
     }
 
-    /// Les groupes des autres années pris dans un conflit : ils ne reçoivent que
-    /// celui-ci, leur propre emploi du temps n'a pas changé.
-    async fn other_years(&self, found: &[Conflict<'_>], own_year: u8) -> Vec<Batch> {
-        let mut years: Vec<u8> = found.iter().flat_map(|c| [c.first.year, c.second.year]).collect();
-        years.sort_unstable();
-        years.dedup();
-        let mut batches = Vec::new();
-        for year in years.into_iter().filter(|year| *year != own_year) {
-            for (group, users) in by_group(self.users.subscribers(year).await) {
-                let concerned: Vec<&Conflict> = found.iter().filter(|c| c.concerns(year, &group)).collect();
-                if !concerned.is_empty() {
-                    batches.push(Batch { file: None, messages: conflict_messages(&concerned), users });
-                }
-            }
+    /// Envoie aux destinataires des conflits les salles doubles que `timetable`
+    /// réserve avec `others`, sauf celles que `previous` réservait déjà.
+    async fn report_conflicts(
+        &self,
+        timetable: &Timetable,
+        others: &[&Timetable],
+        previous: Option<&Timetable>,
+    ) {
+        if self.conflict_recipients.is_empty() {
+            return;
         }
-        batches
+        let found = new_conflicts(timetable, others, previous);
+        if found.is_empty() {
+            return;
+        }
+        info!(
+            year = timetable.year,
+            week = timetable.week,
+            conflicts = found.len(),
+            "salles doubles signalées"
+        );
+        let messages = conflict_messages(&found.iter().collect::<Vec<_>>());
+        for id in self.conflict_recipients.iter() {
+            self.deliver(id, &messages, None).await;
+        }
     }
 
     /// Confirmation d'abonnement, avec la semaine en cours quand elle est connue.
@@ -525,7 +526,7 @@ impl Notifier {
                 let (notifier, content, slots) = (self.clone(), Arc::clone(&content), Arc::clone(&slots));
                 deliveries.spawn(async move {
                     let _slot = slots.acquire_owned().await;
-                    notifier.deliver(&user, &content.0, content.1.as_ref()).await
+                    notifier.deliver(&user.id, &content.0, Some(&content.1)).await
                 });
             }
         }
@@ -550,15 +551,15 @@ impl Notifier {
     }
 
     /// Envoie les messages, le fichier joint au dernier ; vrai si tout est parti.
-    async fn deliver(&self, user: &User, messages: &[String], file: Option<&Attachment>) -> bool {
+    async fn deliver(&self, user: &str, messages: &[String], file: Option<&Attachment>) -> bool {
         for (index, message) in messages.iter().enumerate() {
             let attachment = file.filter(|_| index + 1 == messages.len());
-            if let Err(error) = self.discord.send_dm(&user.id, message, attachment).await {
-                warn!(%error, user = user.id, "message privé impossible");
+            if let Err(error) = self.discord.send_dm(user, message, attachment).await {
+                warn!(%error, user, "message privé impossible");
                 return false;
             }
         }
-        debug!(user = user.id, messages = messages.len(), "message privé envoyé");
+        debug!(user, messages = messages.len(), "message privé envoyé");
         true
     }
 }
@@ -741,6 +742,7 @@ mod tests {
             bot_token: "jeton".into(),
             guild_id: "7".into(),
             known_guild_ids: Vec::new(),
+            conflict_recipients: Vec::new(),
             session_secret: "s".repeat(32),
             public_key: None,
             api_base: server.uri(),
@@ -874,6 +876,44 @@ mod tests {
             .await;
     }
 
+    /// Le banc d'essai, avec un destinataire des conflits (`99`) en plus des abonnés.
+    fn with_recipients(mut bench: Bench, ids: &[&str]) -> Bench {
+        bench.notifier =
+            bench.notifier.with_conflict_recipients(ids.iter().map(|id| (*id).to_owned()).collect());
+        bench
+    }
+
+    /// La conversation privée de `id` porte le numéro `channel`, distinct de
+    /// celle des abonnés (`900`) ; `times` messages y sont attendus.
+    async fn recipient(bench: &Bench, id: &str, channel: &str, status: u16, times: u64) {
+        Mock::given(method("POST"))
+            .and(path("/users/@me/channels"))
+            .and(body_string_contains(format!("\"recipient_id\":\"{id}\"")))
+            .respond_with(ResponseTemplate::new(200).set_body_string(format!(r#"{{"id":"{channel}"}}"#)))
+            .with_priority(1)
+            .mount(&bench.server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(format!("/channels/{channel}/messages")))
+            .and(body_string_contains("Salle réservée par plusieurs cours"))
+            .respond_with(ResponseTemplate::new(status).set_body_string("{}"))
+            .expect(times)
+            .mount(&bench.server)
+            .await;
+    }
+
+    /// Les abonnés reçoivent `times` messages, aucun ne parle de conflit.
+    async fn subscribers_without_conflicts(bench: &Bench, times: u64) {
+        Mock::given(method("POST"))
+            .and(path("/channels/900/messages"))
+            .and(body_string_contains("Salle réservée"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
+            .expect(0)
+            .mount(&bench.server)
+            .await;
+        messages(bench, 200, times).await;
+    }
+
     fn overlapping_week() -> Timetable {
         let mut other = course(660, "G2A", "104");
         other.teacher = Some("Martin P.".into());
@@ -893,38 +933,76 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn adds_conflicts_to_the_publication_message() {
-        let bench = bench().await;
-        Mock::given(method("POST"))
-            .and(path("/channels/900/messages"))
-            .and(body_string_contains("Salle réservée par deux cours"))
-            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
-            .expect(2)
-            .mount(&bench.server)
-            .await;
-        // Les autres messages (annonce, changements) passent sans condition.
-        accept_the_rest(&bench).await;
+    async fn sends_conflicts_to_the_recipients_only() {
+        let bench = with_recipients(bench().await, &["99"]);
+        recipient(&bench, "99", "990", 200, 1).await;
+        // Ada et Bob reçoivent l'annonce de leur semaine, sans le conflit.
+        subscribers_without_conflicts(&bench, 2).await;
         bench.notifier.week_published(&overlapping_week(), &[]).await;
     }
 
     #[tokio::test]
-    async fn reports_a_new_conflict_even_when_the_group_courses_did_not_move() {
+    async fn reports_nothing_without_recipients() {
         let bench = bench().await;
-        Mock::given(method("POST"))
-            .and(path("/channels/900/messages"))
-            .and(body_string_contains("Salle réservée par deux cours"))
-            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
-            .expect(2)
-            .mount(&bench.server)
-            .await;
-        // G2A déplace un cours dans la salle de G1A : G1A ne voit aucun changement
-        // de son emploi du temps, mais sa salle est maintenant prise deux fois.
+        subscribers_without_conflicts(&bench, 2).await;
+        bench.notifier.week_published(&overlapping_week(), &[]).await;
+    }
+
+    #[tokio::test]
+    async fn reports_a_new_conflict_even_when_no_subscriber_course_moved() {
+        let bench = with_recipients(bench().await, &["99"]);
+        recipient(&bench, "99", "990", 200, 1).await;
+        // G2A, sans abonné, déplace un cours dans la salle de G1A : Ada et Bob
+        // n'ont rien à apprendre, la salle est pourtant prise deux fois.
+        subscribers_without_conflicts(&bench, 0).await;
         let before = week(vec![course(600, "G1A", "104"), course(600, "G2A", "105")]);
         let mut moved = course(660, "G2A", "104");
         moved.teacher = Some("Martin P.".into());
         let after = week(vec![course(600, "G1A", "104"), moved]);
-        accept_the_rest(&bench).await;
         bench.notifier.week_changed(&before, &after, &[]).await;
+    }
+
+    #[tokio::test]
+    async fn keeps_sending_to_the_other_recipients_after_a_failure() {
+        let bench = with_recipients(bench().await, &["98", "99"]);
+        // Messages privés fermés chez 98 : 99 est prévenu quand même.
+        recipient(&bench, "98", "980", 403, 1).await;
+        recipient(&bench, "99", "990", 200, 1).await;
+        accept_the_rest(&bench).await;
+        bench.notifier.week_published(&overlapping_week(), &[]).await;
+    }
+
+    #[test]
+    fn names_each_course_once_when_a_long_course_covers_several() {
+        let mut long = course(600, "G1A", "104");
+        long.end = ClockTime::from_minutes(840);
+        let mut morning = course(600, "G2A", "104");
+        morning.teacher = Some("Martin P.".into());
+        morning.resource = Some(Resource { code: "R1.02".into(), name: None });
+        let mut noon = course(720, "G3A", "104");
+        noon.teacher = Some("Durand J.".into());
+        noon.resource = Some(Resource { code: "R1.03".into(), name: None });
+        let timetable = week(vec![long, morning, noon]);
+
+        let found = conflicts::find(&[&timetable]);
+        assert_eq!(found.len(), 2);
+        let text = conflict_messages(&found.iter().collect::<Vec<_>>()).join("\n");
+        assert_eq!(text.matches("⚠️").count(), 1, "{text}");
+        assert_eq!(text.matches("Dupont M.").count(), 1, "{text}");
+        assert!(text.contains("Martin P.") && text.contains("Durand J."), "{text}");
+    }
+
+    #[test]
+    fn names_the_combined_room_of_a_course() {
+        let mut other = course(660, "G2A", "112");
+        other.teacher = Some("Martin P.".into());
+        let timetable = week(vec![course(600, "G1A", "111-2"), other]);
+        let found = conflicts::find(&[&timetable]);
+        let text = conflict_messages(&found.iter().collect::<Vec<_>>()).join("\n");
+        assert!(text.contains("⚠️ salle 112 · mar. 15/09"), "{text}");
+        assert!(text.contains("TP R1.05 · G1A · salle 111-2 · Dupont M."), "{text}");
+        // La salle du titre n'est pas répétée.
+        assert!(text.contains("TP R1.05 · G2A · Martin P."), "{text}");
     }
 
     /// Une semaine de l'année `year`, avec un cours de `group` dans la salle 104.
@@ -945,41 +1023,33 @@ mod tests {
         assert!(text.contains("BUT 2 · TP R3.02 · G1A"), "{text}");
     }
 
-    /// Un abonné de l'année `year` et du demi-groupe `G1a`, de plus.
-    async fn subscribe(bench: &Bench, id: &str, year: u8) {
-        bench.users.sign_in(id, "Cléo", None).await.expect("compte");
-        bench
-            .users
-            .update(id, |user| {
-                user.year = Some(year);
-                user.group = Some("G1a".into());
-            })
-            .await
-            .expect("classe");
-    }
-
     #[tokio::test]
-    async fn tells_the_other_year_about_a_conflict_without_its_own_timetable() {
-        let bench = bench().await;
-        subscribe(&bench, "44", 2).await;
-        // Cléo (A2) ne reçoit que le conflit : un message, sans l'annonce.
+    async fn reports_a_conflict_with_another_year() {
+        let bench = with_recipients(bench().await, &["99"]);
         Mock::given(method("POST"))
-            .and(path("/channels/900/messages"))
-            .and(body_string_contains("BUT 2 · TP R3.02"))
-            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
-            .expect(3)
+            .and(path("/users/@me/channels"))
+            .and(body_string_contains("\"recipient_id\":\"99\""))
+            .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"id":"990"}"#))
+            .with_priority(1)
             .mount(&bench.server)
             .await;
-        accept_the_rest(&bench).await;
+        Mock::given(method("POST"))
+            .and(path("/channels/990/messages"))
+            .and(body_string_contains("BUT 1 · TP R1.05 · G1A"))
+            .and(body_string_contains("BUT 2 · TP R3.02 · G1A"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
+            .expect(1)
+            .mount(&bench.server)
+            .await;
+        subscribers_without_conflicts(&bench, 2).await;
 
-        // Ada et Bob (A1 G1a) reçoivent l'annonce puis le conflit ; Cléo le conflit seul.
         let first = week(vec![course(600, "G1A", "104")]);
         bench.notifier.week_published(&first, &[&other_year(2, "G1A")]).await;
     }
 
     #[tokio::test]
     async fn ignores_a_week_of_the_same_year_among_the_others() {
-        let bench = bench().await;
+        let bench = with_recipients(bench().await, &["99"]);
         messages(&bench, 200, 0).await;
         let mut same_year = other_year(1, "G2A");
         same_year.week = 4;
@@ -990,7 +1060,7 @@ mod tests {
 
     #[tokio::test]
     async fn does_not_repeat_a_conflict_already_known() {
-        let bench = bench().await;
+        let bench = with_recipients(bench().await, &["99"]);
         messages(&bench, 200, 0).await;
         let timetable = overlapping_week();
         bench.notifier.week_changed(&timetable, &timetable, &[]).await;
