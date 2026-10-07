@@ -6,6 +6,7 @@
 
 pub mod catalog;
 pub mod config;
+pub mod conflicts;
 pub mod discord;
 pub mod error;
 pub mod homework;
