@@ -155,7 +155,7 @@ pub fn group<'a>(conflicts: &[&Conflict<'a>]) -> Vec<Overlap<'a>> {
 }
 
 /// Libellé de salle comparable : en majuscules, sans espaces superflus.
-pub fn normalise_room(room: &str) -> String {
+fn normalise_room(room: &str) -> String {
     room.trim().to_uppercase()
 }
 

@@ -121,10 +121,9 @@ export const AnalysisPage: Component = () => {
               <p class="flex flex-wrap gap-x-3 text-muted">
                 <span>{course.groups.join(', ')}</span>
                 <Show when={teacherOf(course)}>{(teacher) => <span>{teacher()}</span>}</Show>
-                {/* Une salle réunie (`108-9`) est dite : c'est elle qui crée le conflit. */}
-                <Show when={course.room && normalise(course.room) !== conflict.room ? course.room : undefined}>
-                  {(room) => <span>{`salle ${room()}`}</span>}
-                </Show>
+                {/* La salle telle que le PDF l'écrit, sur chaque cours : `108` face à `108-9`
+                    montre d'un coup d'œil d'où vient le conflit. */}
+                <Show when={course.room}>{(room) => <span>{`salle ${room()}`}</span>}</Show>
               </p>
             </li>
           )}
