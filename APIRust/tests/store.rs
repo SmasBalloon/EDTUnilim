@@ -15,11 +15,6 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const A1_S3: &[u8] = include_bytes!("fixtures/A1_S3.pdf");
 const A3_S2: &[u8] = include_bytes!("fixtures/A3_S2.pdf");
-const WEEK_8: [&[u8]; 3] = [
-    include_bytes!("fixtures/A1_S8.pdf"),
-    include_bytes!("fixtures/A2_S8.pdf"),
-    include_bytes!("fixtures/A3_S8.pdf"),
-];
 
 fn config(upstream: &MockServer, cache_dir: &std::path::Path) -> Config {
     Config {
@@ -391,91 +386,4 @@ async fn looks_for_room_conflicts_without_fetching_the_other_years() {
     store.timetable(1, 3).await.expect("première version");
     // Revalidation demandée par un client : la réponse ne doit pas attendre l'amont des autres années.
     store.revalidate_timetable(1, 3).await;
-}
-
-/// Le bot, sans abonné, relié à une API Discord simulée, avec `99` pour destinataire des conflits.
-async fn reporting(server: &MockServer, cache_dir: &std::path::Path, state_dir: &std::path::Path) -> Store {
-    let discord = Discord::new(DiscordConfig {
-        client_id: "1".into(),
-        client_secret: "secret".into(),
-        bot_token: "bot".into(),
-        guild_id: "7".into(),
-        known_guild_ids: Vec::new(),
-        conflict_recipients: vec!["99".into()],
-        session_secret: "s".repeat(32),
-        public_key: None,
-        api_base: format!("{}/discord", server.uri()),
-    })
-    .expect("client Discord");
-    let users = Arc::new(UserStore::open(state_dir).await.expect("comptes"));
-    Store::new(&config(server, cache_dir))
-        .expect("store construit")
-        .with_notifier(Notifier::new(discord, users).with_conflict_recipients(vec!["99".into()]))
-}
-
-/// Les trois semaines 8 publiées, dont les PDF réels se disputent les salles 105 et 108.
-async fn serve_week_8(server: &MockServer) {
-    for (year, pdf) in (1..).zip(WEEK_8) {
-        Mock::given(method("GET"))
-            .and(path(format!("/A{year}/")))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_string(format!(r#"<a href="A{year}_S8.pdf">A{year}_S8.pdf</a>"#)),
-            )
-            .mount(server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path(format!("/A{year}/A{year}_S8.pdf")))
-            .respond_with(ResponseTemplate::new(200).set_body_bytes(pdf))
-            .mount(server)
-            .await;
-    }
-}
-
-/// Le message d'état des lieux contient chacun de ces textes, et part `times` fois.
-async fn expect_report(server: &MockServer, contains: &[&'static str], times: u64) {
-    Mock::given(method("POST"))
-        .and(path("/discord/users/@me/channels"))
-        .and(body_string_contains("\"recipient_id\":\"99\""))
-        .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"id":"990"}"#))
-        .mount(server)
-        .await;
-    let mut messages = Mock::given(method("POST")).and(path("/discord/channels/990/messages"));
-    for text in contains {
-        messages = messages.and(body_string_contains(*text));
-    }
-    messages.respond_with(ResponseTemplate::new(200).set_body_string("{}")).expect(times).mount(server).await;
-}
-
-#[tokio::test]
-async fn reports_the_room_conflicts_already_in_the_published_weeks() {
-    let server = MockServer::start().await;
-    serve_week_8(&server).await;
-    // Un seul état des lieux pour les trois années, avec les trois conflits de la semaine du 19/10.
-    expect_report(
-        &server,
-        &["état actuel", "salle 108 · lun. 19/10", "salle 108 · jeu. 22/10", "salle 105 · jeu. 22/10"],
-        1,
-    )
-    .await;
-
-    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
-    let state_dir = tempfile::tempdir().expect("répertoire temporaire");
-    let store = reporting(&server, cache_dir.path(), state_dir.path()).await;
-    store.refresh().await;
-    store.report_conflicts(time::macros::date!(2026 - 10 - 08)).await;
-}
-
-#[tokio::test]
-async fn leaves_out_the_weeks_that_are_over_when_reporting_conflicts() {
-    let server = MockServer::start().await;
-    serve_week_8(&server).await;
-    expect_report(&server, &["état actuel"], 0).await;
-
-    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
-    let state_dir = tempfile::tempdir().expect("répertoire temporaire");
-    let store = reporting(&server, cache_dir.path(), state_dir.path()).await;
-    store.refresh().await;
-    // La semaine 8 est finie : ses conflits appartiennent au passé.
-    store.report_conflicts(time::macros::date!(2026 - 10 - 25)).await;
 }

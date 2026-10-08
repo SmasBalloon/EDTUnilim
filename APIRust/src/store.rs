@@ -388,8 +388,14 @@ mod tests {
     use time::macros::date;
     use time::Date;
 
+    use wiremock::matchers::{body_string_contains, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
     use super::*;
-    use crate::model::Period;
+    use crate::config::DiscordConfig;
+    use crate::discord::Discord;
+    use crate::model::{ClockTime, Course, CourseKind, Period, Resource};
+    use crate::users::UserStore;
 
     fn entry(year: u8, week: u8, start: Date, end: Date) -> Arc<Entry> {
         Arc::new(Entry {
@@ -441,6 +447,103 @@ mod tests {
         assert_eq!(weeks(date!(2026 - 10 - 10)), [6, 7]);
         assert_eq!(weeks(date!(2026 - 10 - 11)), [7]);
         assert!(weeks(date!(2026 - 11 - 01)).is_empty());
+    }
+
+    /// Un cours de BUT `year` le 19/10/2026 dans la salle 104, de `start` à `start + 120` minutes.
+    fn booked(year: u8, start: i64, teacher: &str) -> Arc<Entry> {
+        let course = Course {
+            day: "LUNDI".into(),
+            date: date!(2026 - 10 - 19),
+            start: ClockTime::from_minutes(start),
+            end: ClockTime::from_minutes(start + 120),
+            duration_minutes: 120,
+            kind: CourseKind::Tp,
+            groups: vec!["G1A".into()],
+            resource: Some(Resource { code: format!("R{year}.01"), name: None }),
+            title: None,
+            teacher: Some(teacher.into()),
+            teacher_id: None,
+            room: Some("104".into()),
+        };
+        let mut booked = entry(year, 8, date!(2026 - 10 - 19), date!(2026 - 10 - 24));
+        Arc::get_mut(&mut booked).expect("entrée neuve").timetable.courses.push(course);
+        booked
+    }
+
+    /// Un store dont le cache tient ces semaines, relié à un Discord simulé, avec `99` pour
+    /// destinataire des conflits. Aucun message ne doit partir si `expected` est nul.
+    async fn reporting(entries: &[Arc<Entry>], expected: u64) -> (Store, MockServer) {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/users/@me/channels"))
+            .and(body_string_contains("\"recipient_id\":\"99\""))
+            .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"id":"990"}"#))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/channels/990/messages"))
+            .and(body_string_contains("état actuel"))
+            .and(body_string_contains("salle 104 · lun. 19/10"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
+            .expect(expected)
+            .mount(&server)
+            .await;
+        let discord = Discord::new(DiscordConfig {
+            client_id: "1".into(),
+            client_secret: "secret".into(),
+            bot_token: "bot".into(),
+            guild_id: "7".into(),
+            known_guild_ids: Vec::new(),
+            conflict_recipients: Vec::new(),
+            session_secret: "s".repeat(32),
+            public_key: None,
+            api_base: server.uri(),
+        })
+        .expect("client Discord");
+        let dir = tempfile::tempdir().expect("répertoire temporaire");
+        let users = Arc::new(UserStore::open(dir.path()).await.expect("comptes"));
+        let config = Config {
+            bind: "127.0.0.1:0".parse().expect("adresse"),
+            upstream: server.uri(),
+            cache_dir: dir.path().to_path_buf(),
+            refresh_interval: Duration::from_secs(3600),
+            upstream_timeout: Duration::from_secs(5),
+            state_dir: dir.path().to_path_buf(),
+            public_url: "http://localhost:8080".into(),
+            discord: None,
+        };
+        let store = Store::new(&config)
+            .expect("store construit")
+            .with_notifier(Notifier::new(discord, users).with_conflict_recipients(vec!["99".into()]));
+        for entry in entries {
+            store
+                .timetables
+                .write()
+                .expect("cache")
+                .insert((entry.timetable.year, entry.timetable.week), Arc::clone(entry));
+        }
+        (store, server)
+    }
+
+    #[tokio::test]
+    async fn reports_the_conflicts_between_the_cached_years() {
+        let (store, _server) =
+            reporting(&[booked(1, 600, "Dupont M."), booked(2, 660, "Martin P.")], 1).await;
+        store.report_conflicts(date!(2026 - 10 - 08)).await;
+    }
+
+    #[tokio::test]
+    async fn reports_no_conflict_of_a_week_that_is_over() {
+        let (store, _server) =
+            reporting(&[booked(1, 600, "Dupont M."), booked(2, 660, "Martin P.")], 0).await;
+        store.report_conflicts(date!(2026 - 10 - 25)).await;
+    }
+
+    #[tokio::test]
+    async fn reports_no_conflict_when_the_years_do_not_overlap() {
+        let (store, _server) =
+            reporting(&[booked(1, 480, "Dupont M."), booked(2, 600, "Martin P.")], 0).await;
+        store.report_conflicts(date!(2026 - 10 - 08)).await;
     }
 
     #[test]
