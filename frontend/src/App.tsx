@@ -20,6 +20,7 @@ import {
   LayoutGrid,
   ListChecks,
   List,
+  ScanSearch,
   Settings,
   UserRound,
 } from 'lucide-solid';
@@ -33,6 +34,7 @@ import { clock, greeting, periodLabel, resolveShownWeek } from './lib/time';
 import { settings, update, type ViewMode } from './lib/settings';
 import { centered, cx, note, press, summary as headCards } from './lib/ui';
 import { AccountPage } from './components/AccountPage';
+import { AnalysisPage } from './components/AnalysisPage';
 import { ChangesBar } from './components/ChangesBar';
 import { ComparePage } from './components/ComparePage';
 import { CourseModal } from './components/CourseModal';
@@ -47,13 +49,14 @@ import { StatusCard } from './components/StatusCard';
 import { WeekBar } from './components/WeekBar';
 import { WeekView } from './components/WeekView';
 
-type Page = 'timetable' | 'compare' | 'teachers' | 'rooms' | 'todo' | 'account';
+type Page = 'timetable' | 'compare' | 'teachers' | 'rooms' | 'analysis' | 'todo' | 'account';
 
 const HASHES: Record<Page, string> = {
   timetable: '',
   compare: 'comparer',
   teachers: 'enseignants',
   rooms: 'salles',
+  analysis: 'analyse',
   todo: 'devoirs',
   account: 'compte',
 };
@@ -66,6 +69,7 @@ function pageFromHash(): Page {
   if (location.hash === '#salles') return 'rooms';
   if (location.hash === '#comparer') return 'compare';
   if (location.hash === '#enseignants') return 'teachers';
+  if (location.hash === '#analyse') return 'analysis';
   if (location.hash === '#devoirs') return 'todo';
   return location.hash.startsWith('#compte') ? 'account' : 'timetable';
 }
@@ -74,6 +78,7 @@ const TITLES: Record<Exclude<Page, 'timetable'>, [string, string]> = {
   compare: ['Comparer', 'Deux classes côte à côte, heure par heure.'],
   teachers: ['Enseignants', 'La semaine d\u2019un enseignant, les trois années réunies.'],
   rooms: ['Salles', 'Libres ou occupées, maintenant ou à l’heure choisie.'],
+  analysis: ['Analyse', 'Les salles réservées deux fois dans les PDF que tu déposes.'],
   todo: ['Devoirs', 'Ce qu’il y a à faire, pour toi ou pour ta classe.'],
   account: ['Compte', 'Ta classe et tes messages privés sur Discord.'],
 };
@@ -133,6 +138,7 @@ const NAV: { page: Page; label: string; icon: () => JSX.Element }[] = [
   { page: 'compare', label: 'Comparer deux classes', icon: () => <Columns2 size={16} aria-hidden="true" /> },
   { page: 'teachers', label: 'Emploi du temps d’un enseignant', icon: () => <GraduationCap size={16} aria-hidden="true" /> },
   { page: 'rooms', label: 'Salles libres', icon: () => <DoorOpen size={16} aria-hidden="true" /> },
+  { page: 'analysis', label: 'Analyser des PDF', icon: () => <ScanSearch size={16} aria-hidden="true" /> },
   { page: 'todo', label: 'Devoirs à faire', icon: () => <ListChecks size={16} aria-hidden="true" /> },
   { page: 'account', label: 'Compte Discord', icon: () => <UserRound size={16} aria-hidden="true" /> },
 ];
@@ -322,7 +328,7 @@ export function App() {
       }
       // Les flèches changent de semaine, sur l'emploi du temps comme sur la
       // comparaison : les deux pages en affichent une.
-      if (page() === 'rooms' || page() === 'account') return;
+      if (page() === 'rooms' || page() === 'analysis' || page() === 'account') return;
       if (event.key === 'ArrowLeft') step(-1);
       if (event.key === 'ArrowRight') step(1);
     };
@@ -441,6 +447,8 @@ export function App() {
               fallback={
                 page() === 'rooms' ? (
                   <RoomsPage years={loaded()} onSelect={setSelected} />
+                ) : page() === 'analysis' ? (
+                  <AnalysisPage />
                 ) : page() === 'todo' ? (
                   <TodoPage />
                 ) : page() === 'teachers' ? (

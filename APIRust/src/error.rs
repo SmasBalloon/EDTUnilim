@@ -17,6 +17,14 @@ pub enum ApiError {
     UpstreamUnexpected,
     #[error("l'emploi du temps publié est illisible")]
     Unreadable(#[source] crate::pdf::PdfError),
+    #[error("{file} : ce n'est pas un emploi du temps lisible")]
+    UnreadableUpload {
+        file: String,
+        #[source]
+        source: crate::pdf::PdfError,
+    },
+    #[error("fichiers trop lourds : {max_kb} Ko au plus")]
+    TooLarge { max_kb: usize },
     #[error("{0}")]
     BadRequest(String),
     #[error("cette route n'existe pas")]
@@ -48,7 +56,8 @@ impl ApiError {
             Self::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::UpstreamUnavailable(_) | Self::UpstreamUnexpected => StatusCode::BAD_GATEWAY,
-            Self::Unreadable(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::Unreadable(_) | Self::UnreadableUpload { .. } => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::TooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
         }
     }
 
@@ -62,6 +71,8 @@ impl ApiError {
             Self::UpstreamUnavailable(_) => "upstream_unavailable",
             Self::UpstreamUnexpected => "upstream_unexpected",
             Self::Unreadable(_) => "unreadable_timetable",
+            Self::UnreadableUpload { .. } => "unreadable_upload",
+            Self::TooLarge { .. } => "too_large",
             Self::Unauthenticated => "unauthenticated",
             Self::AuthDisabled => "auth_disabled",
             Self::Storage(_) => "storage",
