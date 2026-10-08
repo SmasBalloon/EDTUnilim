@@ -165,6 +165,7 @@ async fn reminder_loop(homework: Arc<HomeworkStore>, users: Arc<UserStore>, noti
 async fn refresh_loop(store: Arc<Store>, interval: Duration) {
     let mut ticker = tokio::time::interval(interval);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut first = true;
     loop {
         ticker.tick().await;
         let started = Instant::now();
@@ -176,6 +177,11 @@ async fn refresh_loop(store: Arc<Store>, interval: Duration) {
             ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
             "revalidation périodique terminée"
         );
+        // Les semaines publiées sont en cache après ce premier passage : c'est
+        // le moment de faire l'état des salles doubles déjà présentes.
+        if std::mem::take(&mut first) {
+            store.report_conflicts(time::OffsetDateTime::now_utc().date()).await;
+        }
     }
 }
 

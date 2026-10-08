@@ -212,10 +212,19 @@ pub fn change_messages(after: &Timetable, group: &str, changes: &Changes) -> Vec
 /// Les salles réservées en double, une ligne par salle disputée et un cours
 /// par ligne (cours, groupe, enseignant). Vide quand il n'y en a pas.
 pub fn conflict_messages(conflicts: &[&Conflict]) -> Vec<String> {
+    conflict_lines("🚨 **Salle réservée par plusieurs cours en même temps**", conflicts)
+}
+
+/// Comme [`conflict_messages`], pour l'état des lieux de toutes les semaines à venir.
+pub fn conflict_report(conflicts: &[&Conflict]) -> Vec<String> {
+    conflict_lines("📋 **Salles réservées par plusieurs cours en même temps — état actuel**", conflicts)
+}
+
+fn conflict_lines(title: &str, conflicts: &[&Conflict]) -> Vec<String> {
     if conflicts.is_empty() {
         return Vec::new();
     }
-    let mut lines = vec!["🚨 **Salle réservée par plusieurs cours en même temps**".to_owned()];
+    let mut lines = vec![title.to_owned()];
     for overlap in conflicts::group(conflicts) {
         let mut line = format!("⚠️ salle {} · {}", overlap.room, short_date_of(overlap.first().course));
         for booking in &overlap.bookings {
@@ -394,7 +403,25 @@ impl Notifier {
             conflicts = found.len(),
             "salles doubles signalées"
         );
-        let messages = conflict_messages(&found.iter().collect::<Vec<_>>());
+        self.send_to_recipients(conflict_messages(&found.iter().collect::<Vec<_>>())).await;
+    }
+
+    /// Envoie aux destinataires des conflits toutes les salles doubles de ces
+    /// semaines, qu'elles soient nouvelles ou non : un conflit déjà présent au
+    /// démarrage n'est jamais « nouveau » pour [`Self::week_changed`].
+    pub async fn report_existing_conflicts(&self, timetables: &[&Timetable]) {
+        if self.conflict_recipients.is_empty() {
+            return;
+        }
+        let found = conflicts::find(timetables);
+        info!(weeks = timetables.len(), conflicts = found.len(), "état des salles doubles");
+        self.send_to_recipients(conflict_report(&found.iter().collect::<Vec<_>>())).await;
+    }
+
+    async fn send_to_recipients(&self, messages: Vec<String>) {
+        if messages.is_empty() {
+            return;
+        }
         for id in self.conflict_recipients.iter() {
             self.deliver(id, &messages, None).await;
         }
@@ -939,6 +966,71 @@ mod tests {
         // Ada et Bob reçoivent l'annonce de leur semaine, sans le conflit.
         subscribers_without_conflicts(&bench, 2).await;
         bench.notifier.week_published(&overlapping_week(), &[]).await;
+    }
+
+    /// Le destinataire `99` reçoit `times` états des lieux.
+    async fn report_recipient(bench: &Bench, times: u64) {
+        Mock::given(method("POST"))
+            .and(path("/users/@me/channels"))
+            .and(body_string_contains("\"recipient_id\":\"99\""))
+            .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"id":"990"}"#))
+            .with_priority(1)
+            .mount(&bench.server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/channels/990/messages"))
+            .and(body_string_contains("état actuel"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
+            .expect(times)
+            .mount(&bench.server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn reports_the_conflicts_already_there_once() {
+        let bench = with_recipients(bench().await, &["99"]);
+        report_recipient(&bench, 1).await;
+        // Ni les abonnés ni personne d'autre n'est dérangé.
+        subscribers_without_conflicts(&bench, 0).await;
+        // Le conflit existe dans cette version : `week_changed` ne le dirait pas.
+        let timetable = overlapping_week();
+        bench.notifier.report_existing_conflicts(&[&timetable]).await;
+    }
+
+    #[tokio::test]
+    async fn reports_the_conflicts_of_several_weeks_in_one_message() {
+        let bench = with_recipients(bench().await, &["99"]);
+        report_recipient(&bench, 1).await;
+        let mut next = overlapping_week();
+        next.week = 4;
+        for course in &mut next.courses {
+            course.date += time::Duration::days(7);
+        }
+        bench.notifier.report_existing_conflicts(&[&overlapping_week(), &next]).await;
+    }
+
+    #[tokio::test]
+    async fn reports_nothing_when_no_room_is_booked_twice() {
+        let bench = with_recipients(bench().await, &["99"]);
+        report_recipient(&bench, 0).await;
+        let timetable = week(vec![course(600, "G1A", "104"), course(600, "G2A", "105")]);
+        bench.notifier.report_existing_conflicts(&[&timetable]).await;
+    }
+
+    #[tokio::test]
+    async fn reports_no_existing_conflict_without_recipients() {
+        let bench = bench().await;
+        messages(&bench, 200, 0).await;
+        bench.notifier.report_existing_conflicts(&[&overlapping_week()]).await;
+    }
+
+    #[test]
+    fn titles_the_report_as_the_current_state() {
+        let timetable = overlapping_week();
+        let found = conflicts::find(&[&timetable]);
+        let text = conflict_report(&found.iter().collect::<Vec<_>>()).join("\n");
+        assert!(text.contains("état actuel") && text.contains("salle 104 · mar. 15/09"), "{text}");
+        assert!(conflict_report(&[]).is_empty());
     }
 
     #[tokio::test]

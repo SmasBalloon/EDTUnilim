@@ -237,6 +237,20 @@ impl Store {
         }
     }
 
+    /// Signale aux destinataires des conflits toutes les salles doubles des
+    /// semaines en cache qui ne sont pas terminées à `today`.
+    ///
+    /// À lancer une fois les semaines publiées chargées (après le premier
+    /// passage de [`Store::refresh`]) : `week_changed` ne signale que les
+    /// conflits apparus avec une nouvelle version, jamais ceux qui existaient
+    /// avant le démarrage du service.
+    pub async fn report_conflicts(&self, today: time::Date) {
+        let Some(notifier) = &self.notifier else { return };
+        let entries = upcoming(self.timetables.read().expect("cache empoisonné").values(), today);
+        let timetables: Vec<&Timetable> = entries.iter().map(|entry| &entry.timetable).collect();
+        notifier.report_existing_conflicts(&timetables).await;
+    }
+
     /// Les semaines des autres années, déjà en cache, qui couvrent une partie
     /// des mêmes dates : les salles sont partagées, leurs cours se rapprochent
     /// de ceux-ci.
@@ -344,6 +358,11 @@ impl Store {
     }
 }
 
+/// Parmi `entries`, les semaines qui ne sont pas terminées à `today`.
+fn upcoming<'a>(entries: impl IntoIterator<Item = &'a Arc<Entry>>, today: time::Date) -> Vec<Arc<Entry>> {
+    entries.into_iter().filter(|entry| entry.timetable.period.end >= today).cloned().collect()
+}
+
 /// Parmi `entries`, les semaines des autres années dont les dates recoupent
 /// celles de `timetable`. Le numéro de semaine n'est pas le même d'une année à
 /// l'autre ; ce sont les dates de l'en-tête qui font foi.
@@ -406,6 +425,22 @@ mod tests {
         let own = entry(1, 3, date!(2026 - 09 - 14), date!(2026 - 09 - 19));
         let entries = [entry(3, 2, date!(2026 - 09 - 15), date!(2026 - 09 - 18))];
         assert_eq!(found(&entries, &own.timetable), [(3, 2)]);
+    }
+
+    #[test]
+    fn keeps_the_weeks_that_are_not_over() {
+        let entries = [
+            entry(1, 1, date!(2026 - 08 - 31), date!(2026 - 09 - 05)),
+            entry(1, 6, date!(2026 - 10 - 05), date!(2026 - 10 - 10)),
+            entry(1, 7, date!(2026 - 10 - 12), date!(2026 - 10 - 17)),
+        ];
+        let weeks = |today| -> Vec<u8> {
+            upcoming(&entries, today).iter().map(|entry| entry.timetable.week).collect()
+        };
+        // La semaine en cours compte jusqu'à son dernier jour.
+        assert_eq!(weeks(date!(2026 - 10 - 10)), [6, 7]);
+        assert_eq!(weeks(date!(2026 - 10 - 11)), [7]);
+        assert!(weeks(date!(2026 - 11 - 01)).is_empty());
     }
 
     #[test]
