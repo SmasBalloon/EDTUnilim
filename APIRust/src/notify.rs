@@ -141,11 +141,6 @@ fn short_date_of(course: &Course) -> String {
 
 /// `TP R1.05 · G1A · salle 104 · Dupont M.`
 fn what(course: &Course) -> String {
-    what_with(course, true)
-}
-
-/// Comme [`what`], la salle en option : un conflit la nomme une fois pour ses cours.
-fn what_with(course: &Course, show_room: bool) -> String {
     let mut parts = vec![kind_label(course.kind).to_owned()];
     if let Some(label) = course.resource.as_ref().map(|r| r.code.clone()).or_else(|| course.title.clone()) {
         parts[0] = format!("{} {label}", parts[0]);
@@ -153,7 +148,7 @@ fn what_with(course: &Course, show_room: bool) -> String {
     if !course.groups.is_empty() {
         parts.push(course.groups.join(", "));
     }
-    if let Some(room) = course.room.as_ref().filter(|_| show_room) {
+    if let Some(room) = &course.room {
         parts.push(format!("salle {room}"));
     }
     if let Some(teacher) = &course.teacher {
@@ -228,19 +223,18 @@ fn conflict_lines(title: &str, conflicts: &[&Conflict]) -> Vec<String> {
     for overlap in conflicts::group(conflicts) {
         let mut line = format!("⚠️ salle {} · {}", overlap.room, short_date_of(overlap.first().course));
         for booking in &overlap.bookings {
-            line.push_str(&format!("\n   • {}", booking_line(booking, &overlap.room)));
+            line.push_str(&format!("\n   • {}", booking_line(booking)));
         }
         lines.push(line);
     }
     pack(lines)
 }
 
-/// `10:00–12:00 · BUT 1 · TP R1.05 · G1A · Dupont M.` : la salle est dans le
-/// titre du conflit, et n'est répétée que si le cours en réunit plusieurs (`111-2`).
-fn booking_line(booking: &Booking, room: &str) -> String {
+/// `10:00–12:00 · BUT 1 · TP R1.05 · G1A · salle 108-9 · Dupont M.` : chaque cours dit
+/// sa salle telle que le PDF l'écrit, et `108` face à `108-9` montre d'où vient le conflit.
+fn booking_line(booking: &Booking) -> String {
     let course = booking.course;
-    let show_room = course.room.as_deref().is_some_and(|label| conflicts::normalise_room(label) != room);
-    format!("{}–{} · BUT {} · {}", course.start, course.end, booking.year, what_with(course, show_room))
+    format!("{}–{} · BUT {} · {}", course.start, course.end, booking.year, what(course))
 }
 
 /// Annonce d'une semaine qui vient d'apparaître dans l'index.
@@ -954,8 +948,8 @@ mod tests {
         let found = conflicts::find(&[&timetable]);
         let text = conflict_messages(&found.iter().collect::<Vec<_>>()).join("\n");
         assert!(text.contains("salle 104 · mar. 15/09"), "{text}");
-        assert!(text.contains("10:00–12:00 · BUT 1 · TP R1.05 · G1A · Dupont M."), "{text}");
-        assert!(text.contains("11:00–13:00 · BUT 1 · TP R1.02 · G2A · Martin P."), "{text}");
+        assert!(text.contains("10:00–12:00 · BUT 1 · TP R1.05 · G1A · salle 104 · Dupont M."), "{text}");
+        assert!(text.contains("11:00–13:00 · BUT 1 · TP R1.02 · G2A · salle 104 · Martin P."), "{text}");
         assert!(conflict_messages(&[]).is_empty());
     }
 
@@ -1093,8 +1087,8 @@ mod tests {
         let text = conflict_messages(&found.iter().collect::<Vec<_>>()).join("\n");
         assert!(text.contains("⚠️ salle 112 · mar. 15/09"), "{text}");
         assert!(text.contains("TP R1.05 · G1A · salle 111-2 · Dupont M."), "{text}");
-        // La salle du titre n'est pas répétée.
-        assert!(text.contains("TP R1.05 · G2A · Martin P."), "{text}");
+        // Chaque cours dit sa salle, même celle du titre.
+        assert!(text.contains("TP R1.05 · G2A · salle 112 · Martin P."), "{text}");
     }
 
     /// Une semaine de l'année `year`, avec un cours de `group` dans la salle 104.

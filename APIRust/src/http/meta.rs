@@ -22,6 +22,8 @@ pub async fn index() -> Json<Value> {
                 "abonnement iCalendar (webcal) d'un demi-groupe, toutes semaines publiées",
             "GET /api/v1/resources": "référentiel des ressources et SAÉ",
             "GET /api/v1/teachers": "enseignants connus, et leurs autres écritures",
+            "POST /api/v1/analysis":
+                "salles réservées deux fois dans des PDF déposés (multipart, un champ par année : 1, 2, 3)",
             "GET /api/v1/auth/login": "connexion avec Discord",
             "POST /api/v1/auth/logout": "déconnexion",
             "GET|PUT|DELETE /api/v1/me": "compte : classe suivie et messages privés",

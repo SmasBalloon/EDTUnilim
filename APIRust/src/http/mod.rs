@@ -1,6 +1,7 @@
 //! Couche HTTP : routage et état partagé.
 
 mod account;
+mod analysis;
 mod homework;
 mod interactions;
 mod meta;
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::extract::rejection::PathRejection;
-use axum::extract::{FromRequestParts, Path, Request};
+use axum::extract::{DefaultBodyLimit, FromRequestParts, Path, Request};
 use axum::http::request::Parts;
 use axum::http::StatusCode;
 use axum::middleware::{self, Next};
@@ -82,6 +83,7 @@ pub fn router(config: &Config, store: Arc<Store>, account: Option<Arc<Account>>)
         .route("/api/v1/years/{year}/weeks", get(timetable::weeks))
         .route("/api/v1/years/{year}/weeks/{week}", get(timetable::week))
         .route("/api/v1/years/{year}/calendar/{group}", get(timetable::calendar))
+        .route("/api/v1/analysis", post(analysis::analyse).layer(DefaultBodyLimit::max(analysis::MAX_BODY)))
         .route("/api/v1/auth/login", get(account::login))
         .route("/api/v1/auth/callback", get(account::callback))
         .route("/api/v1/auth/logout", post(account::logout))

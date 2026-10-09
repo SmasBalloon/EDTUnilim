@@ -4,6 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum_test::multipart::{MultipartForm, Part};
 use axum_test::TestServer;
 use edt_unilim_api::config::Config;
 use edt_unilim_api::http;
@@ -12,6 +13,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const A1_S3: &[u8] = include_bytes!("fixtures/A1_S3.pdf");
+const A3_S2: &[u8] = include_bytes!("fixtures/A3_S2.pdf");
 
 fn server() -> TestServer {
     let config = Config::from_env().expect("configuration par défaut valide");
@@ -289,4 +291,95 @@ async fn a_calendar_rejects_an_unknown_year_in_json() {
 
     response.assert_status_not_found();
     response.assert_json_contains(&serde_json::json!({ "error": "unknown_year" }));
+}
+
+/// Un PDF déposé dans le champ de l'année `year`.
+fn pdf(form: MultipartForm, year: &str, name: &str, bytes: &[u8]) -> MultipartForm {
+    form.add_part(year, Part::bytes(bytes.to_vec()).file_name(name).mime_type("application/pdf"))
+}
+
+#[tokio::test]
+async fn analyses_dropped_pdfs_without_the_upstream() {
+    let form = pdf(pdf(MultipartForm::new(), "3", "A3_S2.pdf", A3_S2), "1", "A1_S3.pdf", A1_S3);
+    let response = server().post("/api/v1/analysis").multipart(form).await;
+
+    response.assert_status_ok();
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["weeks"][0]["file"], "A1_S3.pdf");
+    assert_eq!(body["weeks"][0]["year"], 1);
+    assert_eq!(body["weeks"][0]["period"]["week_number"], 38);
+    assert_eq!(body["weeks"][1]["year"], 3);
+    assert!(body["weeks"][0]["courses"].as_u64().unwrap() > 0);
+    // Deux semaines différentes : rien ne peut se chevaucher, et la page le dit.
+    assert_eq!(body["same_dates"], false);
+    assert_eq!(body["conflicts"], serde_json::json!([]));
+}
+
+#[tokio::test]
+async fn refuses_an_analysis_without_pdf() {
+    // Le formulaire vide qu'enverrait un navigateur : le seul délimiteur de fin.
+    let response = server()
+        .post("/api/v1/analysis")
+        .content_type("multipart/form-data; boundary=vide")
+        .bytes("--vide--\r\n".into())
+        .await;
+
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+    assert!(response.text().contains("au moins un PDF"), "{}", response.text());
+}
+
+#[tokio::test]
+async fn refuses_an_unknown_year() {
+    let form = pdf(MultipartForm::new(), "4", "A4_S1.pdf", A1_S3);
+    let response = server().post("/api/v1/analysis").multipart(form).await;
+
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+    assert!(response.text().contains("année inconnue"));
+}
+
+#[tokio::test]
+async fn refuses_two_pdfs_for_one_year() {
+    let form = pdf(pdf(MultipartForm::new(), "1", "A1_S3.pdf", A1_S3), "1", "A1_S3 (2).pdf", A1_S3);
+    let response = server().post("/api/v1/analysis").multipart(form).await;
+
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+    assert!(response.text().contains("un seul PDF par année"));
+}
+
+#[tokio::test]
+async fn names_the_file_that_is_not_a_timetable() {
+    let form = pdf(pdf(MultipartForm::new(), "1", "A1_S3.pdf", A1_S3), "2", "notes.pdf", b"pas un PDF");
+    let response = server().post("/api/v1/analysis").multipart(form).await;
+
+    response.assert_status(axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    response.assert_json_contains(&serde_json::json!({ "error": "unreadable_upload" }));
+    assert!(response.text().contains("notes.pdf"));
+}
+
+#[tokio::test]
+async fn refuses_files_too_heavy() {
+    let form = pdf(MultipartForm::new(), "1", "gros.pdf", &vec![b'%'; 2 * 1024 * 1024]);
+    let response = server().post("/api/v1/analysis").multipart(form).await;
+
+    response.assert_status(axum::http::StatusCode::PAYLOAD_TOO_LARGE);
+}
+
+#[tokio::test]
+async fn refuses_an_analysis_that_is_not_a_form() {
+    let response = server().post("/api/v1/analysis").json(&serde_json::json!({})).await;
+
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+    response.assert_json_contains(&serde_json::json!({ "error": "bad_request" }));
+}
+
+#[tokio::test]
+async fn refuses_a_broken_form_in_french() {
+    let response = server()
+        .post("/api/v1/analysis")
+        .content_type("multipart/form-data; boundary=casse")
+        .bytes("--casse\r\n".into())
+        .await;
+
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+    assert!(response.text().contains("formulaire illisible"), "{}", response.text());
 }

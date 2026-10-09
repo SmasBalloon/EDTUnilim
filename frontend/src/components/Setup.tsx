@@ -54,6 +54,12 @@ export const Setup: Component<{ years: YearSummary[] }> = (props) => {
           temps et ses changements en message privé.
         </p>
 
+        {/* L'analyse ne dépend d'aucune classe : on y va sans en choisir une. */}
+        <p class={`${note} mt-2`}>
+          Ou <a class={link} href="#analyse">analyse des PDF</a> pour repérer les salles réservées deux
+          fois, sans choisir de groupe.
+        </p>
+
         <Show when={year() !== null}>
           <section class="mt-5">
             <Show when={!bases.loading} fallback={<p class={note}>Lecture des groupes…</p>}>

@@ -164,16 +164,20 @@ export interface Me {
 /** Issue du message privé de confirmation. */
 export type Delivery = 'none' | 'sent' | 'closed' | 'failed';
 
-/** Requête vers les routes du compte : jamais mises en cache. */
+/**
+ * Requête vers les routes du compte : jamais mises en cache. Un `FormData`
+ * part tel quel — le navigateur pose lui-même son `content-type` et sa limite.
+ */
 async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const form = body instanceof FormData;
   let response: Response;
   try {
     response = await fetch(`${BASE}${path}`, {
       method,
       credentials: 'same-origin',
       cache: 'no-store',
-      headers: body === undefined ? { accept: 'application/json' } : { accept: 'application/json', 'content-type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: body === undefined || form ? { accept: 'application/json' } : { accept: 'application/json', 'content-type': 'application/json' },
+      body: body === undefined ? undefined : form ? body : JSON.stringify(body),
     });
   } catch {
     throw new ApiError('offline', 'service injoignable — vérifie ta connexion', 0);
@@ -221,4 +225,38 @@ export function calendarUrl(year: number, group: string): string {
 /** La même en `webcal://` : un clic l'ouvre dans l'agenda du système. */
 export function webcalUrl(year: number, group: string): string {
   return calendarUrl(year, group).replace(/^https?:/, 'webcal:');
+}
+
+/** Une semaine lue dans un PDF déposé. */
+export interface AnalysedWeek {
+  file: string;
+  year: number;
+  period: Period;
+  /** Nombre de cours lus. */
+  courses: number;
+}
+
+/** Une salle disputée : les cours qui l'occupent en même temps, par horaire. */
+export interface RoomConflict {
+  room: string;
+  date: string;
+  day: string;
+  bookings: { year: number; course: Course }[];
+}
+
+export interface Analysis {
+  weeks: AnalysedWeek[];
+  /** Faux quand les PDF ne couvrent pas les mêmes dates : rien ne pouvait se chevaucher. */
+  same_dates: boolean;
+  conflicts: RoomConflict[];
+}
+
+/**
+ * Cherche les salles réservées deux fois dans des PDF déposés, un par année.
+ * Rien n'est conservé par l'API.
+ */
+export function analyse(files: { year: number; file: File }[]): Promise<Analysis> {
+  const form = new FormData();
+  for (const { year, file } of files) form.append(String(year), file, file.name);
+  return send('POST', '/api/v1/analysis', form);
 }
