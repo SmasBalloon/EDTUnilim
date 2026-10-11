@@ -15,6 +15,7 @@ pub mod ics;
 pub mod model;
 pub mod notify;
 pub mod pdf;
+pub mod persist;
 pub mod presence;
 pub mod session;
 pub mod store;

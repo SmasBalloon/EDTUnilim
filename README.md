@@ -7,7 +7,6 @@ PDF publiés par le département et servis en JSON, avec une interface web.
 | --- | --- |
 | [`APIRust/`](APIRust) | l'API : téléchargement des PDF, extraction des créneaux, JSON ([fonctionnement](APIRust/FONCTIONNEMENT.md)) |
 | [`frontend/`](frontend) | l'interface SolidJS : semaine par colonnes de jours, en grille ou en liste |
-| [`api-edt-unilim/`](api-edt-unilim) | la version NestJS précédente |
 
 **Couverture des tests (API Rust) :** <!-- coverage:start -->![Couverture des tests](https://img.shields.io/badge/couverture_API-95.1%25-brightgreen)<!-- coverage:end -->
 mesurée par `cargo llvm-cov`, mise à jour automatiquement à chaque push sur `master`.
@@ -34,6 +33,7 @@ variables d'environnement — copier `.env.example` en `.env` pour les changer :
 | `EDT_DISCORD_PUBLIC_KEY` | — | clé publique de l'application : allume les commandes slash |
 | `EDT_DISCORD_GUILD_ID` | — | serveur où les personnes connectées sont ajoutées |
 | `EDT_DISCORD_KNOWN_GUILD_IDS` | — | serveurs où se trouve déjà le bot, séparés par des virgules : leurs membres ne sont pas ajoutés |
+| `EDT_DISCORD_CONFLICT_RECIPIENTS` | voir `compose.yaml` | comptes Discord prévenus des salles réservées en double, séparés par des virgules (vide : aucun envoi) |
 | `EDT_SESSION_SECRET` | — | clé de signature des sessions (32 caractères au moins) |
 | `EDT_STATE_DIR` | `state` | comptes et classes suivies (`users.json`) |
 | `EDT_LOG` | `info` | filtre de journalisation de l'API |
@@ -41,6 +41,14 @@ variables d'environnement — copier `.env.example` en `.env` pour les changer :
 Les PDF téléchargés vivent dans le volume `edt-cache` : après un redémarrage,
 le service répond immédiatement, et continue de répondre même si le serveur du
 département est indisponible.
+
+Les comptes et les devoirs vivent dans le volume `edt-state` (`users.json`,
+`homework.json`). Chaque écriture est atomique, et la version précédente reste à
+côté en `.bak`. Pour en garder une copie hors de la machine :
+
+```bash
+docker compose cp api:/app/state ./sauvegarde-$(date +%F)
+```
 
 ```bash
 docker compose logs -f api      # journaux de l'API
