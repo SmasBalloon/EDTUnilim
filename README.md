@@ -8,7 +8,7 @@ PDF publiés par le département et servis en JSON, avec une interface web.
 | [`APIRust/`](APIRust) | l'API : téléchargement des PDF, extraction des créneaux, JSON ([fonctionnement](APIRust/FONCTIONNEMENT.md)) |
 | [`frontend/`](frontend) | l'interface SolidJS : semaine par colonnes de jours, en grille ou en liste |
 
-**Couverture des tests (API Rust) :** <!-- coverage:start -->![Couverture des tests](https://img.shields.io/badge/couverture_API-95.1%25-brightgreen)<!-- coverage:end -->
+**Couverture des tests (API Rust) :** <!-- coverage:start -->![Couverture des tests](https://img.shields.io/badge/couverture_API-95.2%25-brightgreen)<!-- coverage:end -->
 mesurée par `cargo llvm-cov`, mise à jour automatiquement à chaque push sur `master`.
 
 ## Tout lancer avec Docker
