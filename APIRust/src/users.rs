@@ -1,8 +1,8 @@
 //! Comptes des personnes connectées avec Discord.
 //!
 //! Quelques centaines d'étudiants au plus : un fichier JSON suffit. Il est
-//! réécrit en entier à chaque modification, via un fichier temporaire renommé,
-//! pour ne jamais laisser une version à moitié écrite.
+//! réécrit en entier à chaque modification ([`persist`]), la version
+//! précédente gardée dans `users.json.bak`.
 
 use std::collections::BTreeMap;
 use std::io;
@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tokio::sync::RwLock;
+
+use crate::persist;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct User {
@@ -120,14 +122,9 @@ impl UserStore {
     }
 
     async fn save(&self, users: &BTreeMap<String, User>) -> io::Result<()> {
-        if let Some(parent) = self.path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
         let list: Vec<&User> = users.values().collect();
         let bytes = serde_json::to_vec_pretty(&list).map_err(io::Error::other)?;
-        let temporary = self.path.with_extension("json.tmp");
-        tokio::fs::write(&temporary, bytes).await?;
-        tokio::fs::rename(&temporary, &self.path).await
+        persist::write_with_backup(&self.path, &bytes).await
     }
 }
 

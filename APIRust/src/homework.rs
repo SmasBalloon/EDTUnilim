@@ -23,6 +23,7 @@ use time::{Date, OffsetDateTime};
 use tokio::sync::RwLock;
 
 use crate::model::{matches_group, ClockTime};
+use crate::persist;
 use crate::session::nonce;
 use crate::users::User;
 
@@ -271,14 +272,9 @@ impl HomeworkStore {
     }
 
     async fn save(&self, items: &BTreeMap<String, Homework>) -> io::Result<()> {
-        if let Some(parent) = self.path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
         let list: Vec<&Homework> = items.values().collect();
         let bytes = serde_json::to_vec_pretty(&list).map_err(io::Error::other)?;
-        let temporary = self.path.with_extension("json.tmp");
-        tokio::fs::write(&temporary, bytes).await?;
-        tokio::fs::rename(&temporary, &self.path).await
+        persist::write_with_backup(&self.path, &bytes).await
     }
 }
 

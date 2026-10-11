@@ -17,6 +17,7 @@ use crate::error::ApiError;
 use crate::model::Timetable;
 use crate::notify::Notifier;
 use crate::pdf;
+use crate::persist;
 use crate::upstream::{self, Fetch, Upstream, Validators};
 
 /// Un emploi du temps analysé, avec de quoi vérifier s'il est encore à jour.
@@ -332,11 +333,7 @@ impl Store {
 
     async fn write_to_disk(&self, year: u8, week: u8, bytes: &[u8]) {
         let path = self.disk_path(year, week);
-        let written = match path.parent() {
-            Some(parent) => tokio::fs::create_dir_all(parent).await.and(tokio::fs::write(&path, bytes).await),
-            None => tokio::fs::write(&path, bytes).await,
-        };
-        if let Err(error) = written {
+        if let Err(error) = persist::write_atomic(&path, bytes).await {
             warn!(%error, path = %path.display(), "écriture du cache disque impossible");
         }
     }
