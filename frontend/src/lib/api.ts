@@ -159,6 +159,8 @@ export interface Me {
   group: string | null;
   /** Recevoir les emplois du temps et leurs changements en message privé. */
   notify: boolean;
+  /** Gère les PDF en cache (`EDT_DISCORD_ADMINS`) : la page `#pdf` lui est ouverte. */
+  admin: boolean;
 }
 
 /** Issue du message privé de confirmation. */
@@ -259,4 +261,48 @@ export function analyse(files: { year: number; file: File }[]): Promise<Analysis
   const form = new FormData();
   for (const { year, file } of files) form.append(String(year), file, file.name);
   return send('POST', '/api/v1/analysis', form);
+}
+
+/** Un PDF du cache de l'API. */
+export interface CachedPdf {
+  week: number;
+  bytes: number;
+  /** Dernière écriture, téléchargement ou dépôt. */
+  saved_at: string;
+  /** Absents tant que la semaine n'a pas été lue depuis le démarrage de l'API. */
+  period: Period | null;
+  courses: number | null;
+}
+
+export interface YearPdfs {
+  year: number;
+  pdfs: CachedPdf[];
+}
+
+/** Une semaine déposée, telle que l'API l'a lue. */
+export interface ImportedPdf {
+  file: string;
+  year: number;
+  week: number;
+  period: Period;
+  courses: number;
+}
+
+/** Les PDF en cache, par année. Réservé aux administrateurs. */
+export function fetchPdfs(): Promise<YearPdfs[]> {
+  return send('GET', '/api/v1/admin/pdfs');
+}
+
+/** Le PDF en cache d'une semaine, à ouvrir dans un onglet. */
+export function pdfUrl(year: number, week: number): string {
+  return `${BASE}/api/v1/admin/pdfs/${year}/${week}`;
+}
+
+/** Dépose le PDF d'une semaine : il remplace celui en cache. */
+export async function uploadPdf(year: number, week: number, file: File): Promise<ImportedPdf> {
+  const form = new FormData();
+  form.append(`A${year}_S${week}`, file, file.name);
+  // Un seul champ envoyé : l'API rend une seule semaine.
+  const [imported] = await send<[ImportedPdf]>('POST', '/api/v1/admin/pdfs', form);
+  return imported;
 }

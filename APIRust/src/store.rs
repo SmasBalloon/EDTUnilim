@@ -9,12 +9,13 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
+use serde::Serialize;
 use time::OffsetDateTime;
 use tracing::{debug, info, warn};
 
 use crate::config::{Config, YEARS};
 use crate::error::ApiError;
-use crate::model::Timetable;
+use crate::model::{Period, Timetable};
 use crate::notify::Notifier;
 use crate::pdf;
 use crate::persist;
@@ -26,6 +27,19 @@ pub struct Entry {
     pub timetable: Timetable,
     pub fetched_at: OffsetDateTime,
     validators: Validators,
+}
+
+/// Un PDF du cache disque, tel que la page d'administration le présente.
+#[derive(Debug, Serialize)]
+pub struct CachedPdf {
+    pub week: u8,
+    pub bytes: u64,
+    /// Dernière écriture : téléchargement ou dépôt à la main.
+    #[serde(with = "time::serde::rfc3339")]
+    pub saved_at: OffsetDateTime,
+    /// Ce qu'en dit l'en-tête, quand la semaine a déjà été analysée.
+    pub period: Option<Period>,
+    pub courses: Option<usize>,
 }
 
 /// Bilan d'une revalidation périodique, pour les journaux.
@@ -100,8 +114,23 @@ impl Store {
             return Ok(Arc::clone(weeks));
         }
 
-        let weeks = Arc::new(self.upstream.list_weeks(year).await.map_err(ApiError::UpstreamUnavailable)?);
-        info!(year, count = weeks.len(), "index des semaines chargé");
+        let weeks = match self.upstream.list_weeks(year).await {
+            Ok(weeks) => {
+                info!(year, count = weeks.len(), "index des semaines chargé");
+                weeks
+            }
+            // Le département est injoignable : les semaines déjà sur disque
+            // restent consultables. La revalidation remplacera cet index.
+            Err(error) => {
+                let cached = self.weeks_on_disk(year).await;
+                if cached.is_empty() {
+                    return Err(ApiError::UpstreamUnavailable(error));
+                }
+                warn!(%error, year, count = cached.len(), "index des semaines indisponible, repli sur le cache disque");
+                cached
+            }
+        };
+        let weeks = Arc::new(weeks);
         self.weeks.write().expect("cache empoisonné").insert(year, Arc::clone(&weeks));
         Ok(weeks)
     }
@@ -201,8 +230,122 @@ impl Store {
                 debug!(year, count = weeks.len(), "index des semaines revalidé");
                 self.weeks.write().expect("cache empoisonné").insert(year, Arc::new(weeks));
             }
-            Err(error) => warn!(%error, year, "index des semaines indisponible"),
+            Err(error) => {
+                warn!(%error, year, "index des semaines indisponible");
+                // Sans index en mémoire, chaque requête attendrait à son tour
+                // le délai du serveur amont : le disque en tient lieu.
+                if !self.weeks.read().expect("cache empoisonné").contains_key(&year) {
+                    let cached = self.weeks_on_disk(year).await;
+                    if !cached.is_empty() {
+                        info!(year, count = cached.len(), "index des semaines repris du cache disque");
+                        self.weeks.write().expect("cache empoisonné").entry(year).or_insert(Arc::new(cached));
+                    }
+                }
+            }
         }
+    }
+
+    /// Semaines dont le PDF est sur disque, par ordre croissant.
+    async fn weeks_on_disk(&self, year: u8) -> Vec<u8> {
+        self.files_on_disk(year).await.into_iter().map(|(week, _)| week).collect()
+    }
+
+    /// Les PDF d'une année sur disque, par semaine croissante.
+    async fn files_on_disk(&self, year: u8) -> Vec<(u8, std::fs::Metadata)> {
+        let mut files = Vec::new();
+        let Ok(mut dir) = tokio::fs::read_dir(self.cache_dir.join(format!("A{year}"))).await else {
+            return files;
+        };
+        while let Ok(Some(item)) = dir.next_entry().await {
+            let name = item.file_name();
+            let Some((found, week)) = name.to_str().and_then(upstream::parse_week_file_name) else {
+                continue;
+            };
+            if found != year {
+                continue;
+            }
+            if let Ok(metadata) = item.metadata().await {
+                files.push((week, metadata));
+            }
+        }
+        files.sort_unstable_by_key(|(week, _)| *week);
+        files
+    }
+
+    /// Les PDF en cache d'une année, avec ce qu'on en sait.
+    pub async fn cached_pdfs(&self, year: u8) -> Vec<CachedPdf> {
+        let files = self.files_on_disk(year).await;
+        let timetables = self.timetables.read().expect("cache empoisonné");
+        files
+            .into_iter()
+            .map(|(week, metadata)| {
+                let entry = timetables.get(&(year, week));
+                CachedPdf {
+                    week,
+                    bytes: metadata.len(),
+                    saved_at: metadata.modified().map_or(OffsetDateTime::UNIX_EPOCH, OffsetDateTime::from),
+                    period: entry.map(|entry| entry.timetable.period.clone()),
+                    courses: entry.map(|entry| entry.timetable.courses.len()),
+                }
+            })
+            .collect()
+    }
+
+    /// Le PDF en cache d'une semaine, tel qu'il a été reçu.
+    pub async fn cached_pdf(&self, year: u8, week: u8) -> Option<Vec<u8>> {
+        if !YEARS.contains(&year) {
+            return None;
+        }
+        tokio::fs::read(self.disk_path(year, week)).await.ok()
+    }
+
+    /// Dépose à la main le PDF d'une semaine, quand le département est
+    /// injoignable : il remplace la version en cache, sur disque comme en
+    /// mémoire, et la semaine rejoint l'index de son année.
+    ///
+    /// Les abonnés sont prévenus comme pour une version téléchargée. Faute de
+    /// validateurs, la prochaine revalidation retéléchargera la version du
+    /// département dès qu'il répondra : c'est elle qui fait foi.
+    pub async fn import(&self, year: u8, week: u8, file: &str, bytes: &[u8]) -> Result<Arc<Entry>, ApiError> {
+        if !YEARS.contains(&year) {
+            return Err(ApiError::UnknownYear(year));
+        }
+        let timetable = pdf::parse(bytes, year, week)
+            .map_err(|source| ApiError::UnreadableUpload { file: file.to_owned(), source })?;
+        persist::write_atomic(&self.disk_path(year, week), bytes).await?;
+
+        let entry = Arc::new(Entry {
+            timetable,
+            fetched_at: OffsetDateTime::now_utc(),
+            validators: Validators::default(),
+        });
+        let previous =
+            self.timetables.write().expect("cache empoisonné").insert((year, week), Arc::clone(&entry));
+        let published = {
+            let mut index = self.weeks.write().expect("cache empoisonné");
+            let weeks = index.entry(year).or_default();
+            if weeks.contains(&week) {
+                false
+            } else {
+                let mut next = weeks.to_vec();
+                next.push(week);
+                next.sort_unstable();
+                *weeks = Arc::new(next);
+                true
+            }
+        };
+        info!(year, week, courses = entry.timetable.courses.len(), file, "emploi du temps déposé à la main");
+
+        if let Some(notifier) = &self.notifier {
+            let others = self.same_dates(&entry.timetable);
+            let others: Vec<&Timetable> = others.iter().map(|other| &other.timetable).collect();
+            match &previous {
+                Some(previous) => notifier.week_changed(&previous.timetable, &entry.timetable, &others).await,
+                None if published => notifier.week_published(&entry.timetable, &others).await,
+                None => {}
+            }
+        }
+        Ok(entry)
     }
 
     /// Met en cache les semaines publiées qui n'y sont pas encore, pour que
@@ -492,6 +635,7 @@ mod tests {
             guild_id: "7".into(),
             known_guild_ids: Vec::new(),
             conflict_recipients: Vec::new(),
+            admins: Vec::new(),
             session_secret: "s".repeat(32),
             public_key: None,
             api_base: server.uri(),

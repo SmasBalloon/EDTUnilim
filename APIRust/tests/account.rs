@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::http::StatusCode;
+use axum_test::multipart::{MultipartForm, Part};
 use axum_test::TestServer;
 use edt_unilim_api::config::{Config, DiscordConfig};
 use edt_unilim_api::discord::Discord;
@@ -25,6 +26,11 @@ struct Setup {
 }
 
 async fn setup(upstream: &MockServer) -> Setup {
+    setup_with_admins(upstream, Vec::new()).await
+}
+
+/// Comme [`setup`], avec ces comptes pour administrateurs des PDF.
+async fn setup_with_admins(upstream: &MockServer, admins: Vec<String>) -> Setup {
     let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
     let state_dir = tempfile::tempdir().expect("répertoire temporaire");
     let discord_config = DiscordConfig {
@@ -34,6 +40,7 @@ async fn setup(upstream: &MockServer) -> Setup {
         guild_id: "7".into(),
         known_guild_ids: vec!["5".into()],
         conflict_recipients: Vec::new(),
+        admins: admins.clone(),
         session_secret: "s".repeat(32),
         public_key: None,
         api_base: format!("{}/discord", upstream.uri()),
@@ -62,6 +69,7 @@ async fn setup(upstream: &MockServer) -> Setup {
         signer: Signer::new(&discord_config.session_secret),
         public_url: config.public_url.clone(),
         secure: false,
+        admins,
     });
 
     let mut server = TestServer::new(http::router(&config, store, Some(account)));
@@ -230,4 +238,79 @@ async fn reports_the_account_routes_as_disabled_without_discord() {
     let response = server.get("/api/v1/me").await;
     response.assert_status(StatusCode::NOT_FOUND);
     response.assert_json_contains(&json!({ "error": "auth_disabled" }));
+}
+
+/// Connecte Ada (`42`) auprès de l'API Discord simulée.
+async fn sign_in(server: &TestServer) {
+    let state = start_login(server).await;
+    server.get(&format!("/api/v1/auth/callback?code=abc&state={state}")).await;
+}
+
+fn week_pdf(field: &str) -> MultipartForm {
+    MultipartForm::new()
+        .add_part(field, Part::bytes(A1_S3.to_vec()).file_name("A1_S3.pdf").mime_type("application/pdf"))
+}
+
+#[tokio::test]
+async fn an_admin_imports_a_pdf_while_the_department_is_down() {
+    let upstream = MockServer::start().await;
+    discord_accepts_login(&upstream, false).await;
+    // Le département ne répond plus : rien d'autre n'est simulé.
+    let Setup { server, _dirs } = setup_with_admins(&upstream, vec!["42".into()]).await;
+    sign_in(&server).await;
+    let me: Value = server.get("/api/v1/me").await.json();
+    assert_eq!(me["admin"], true);
+
+    let listed: Value = server.get("/api/v1/admin/pdfs").await.json();
+    assert_eq!(listed[0]["pdfs"], json!([]));
+
+    let imported = server.post("/api/v1/admin/pdfs").multipart(week_pdf("A1_S3")).await;
+    imported.assert_status_ok();
+    let imported: Value = imported.json();
+    assert_eq!(imported[0]["week"], 3);
+    assert!(imported[0]["courses"].as_u64().unwrap() > 0);
+
+    // La semaine déposée est servie comme une semaine téléchargée.
+    let weeks: Value = server.get("/api/v1/years/1/weeks").await.json();
+    assert_eq!(weeks["weeks"], json!([3]));
+    server.get("/api/v1/years/1/weeks/3").await.assert_status_ok();
+
+    let listed: Value = server.get("/api/v1/admin/pdfs").await.json();
+    assert_eq!(listed[0]["pdfs"][0]["week"], 3);
+    assert_eq!(listed[0]["pdfs"][0]["bytes"], A1_S3.len());
+    let pdf = server.get("/api/v1/admin/pdfs/1/3").await;
+    pdf.assert_status_ok();
+    assert_eq!(pdf.as_bytes().as_ref(), A1_S3);
+}
+
+#[tokio::test]
+async fn refuses_an_import_that_is_not_a_week() {
+    let upstream = MockServer::start().await;
+    discord_accepts_login(&upstream, false).await;
+    let Setup { server, _dirs } = setup_with_admins(&upstream, vec!["42".into()]).await;
+    sign_in(&server).await;
+
+    for field in ["A4_S3", "semaine"] {
+        let response = server.post("/api/v1/admin/pdfs").multipart(week_pdf(field)).await;
+        response.assert_status(StatusCode::BAD_REQUEST);
+    }
+    let unreadable =
+        MultipartForm::new().add_part("A1_S3", Part::bytes(b"pas un PDF".to_vec()).file_name("x.pdf"));
+    let response = server.post("/api/v1/admin/pdfs").multipart(unreadable).await;
+    response.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn keeps_the_pdfs_from_other_accounts() {
+    let upstream = MockServer::start().await;
+    discord_accepts_login(&upstream, false).await;
+    let Setup { server, _dirs } = setup(&upstream).await;
+    server.get("/api/v1/admin/pdfs").await.assert_status(StatusCode::UNAUTHORIZED);
+
+    sign_in(&server).await;
+    let me: Value = server.get("/api/v1/me").await.json();
+    assert_eq!(me["admin"], false);
+    server.get("/api/v1/admin/pdfs").await.assert_status(StatusCode::FORBIDDEN);
+    server.get("/api/v1/admin/pdfs/1/3").await.assert_status(StatusCode::FORBIDDEN);
+    server.post("/api/v1/admin/pdfs").multipart(week_pdf("A1_S3")).await.assert_status(StatusCode::FORBIDDEN);
 }

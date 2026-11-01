@@ -60,6 +60,52 @@ async fn lists_weeks_from_the_upstream_index() {
 }
 
 #[tokio::test]
+async fn lists_the_weeks_on_disk_when_the_upstream_index_is_unavailable() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/A1/"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/A2/"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let year_dir = cache_dir.path().join("A1");
+    std::fs::create_dir_all(&year_dir).unwrap();
+    for name in ["A1_S12.pdf", "A1_S3.pdf", "A1_S3.pdf.tmp", "A2_S4.pdf", "notes.txt"] {
+        std::fs::write(year_dir.join(name), A1_S3).unwrap();
+    }
+    let store = Store::new(&config(&server, cache_dir.path())).expect("store construit");
+
+    assert_eq!(*store.weeks(1).await.expect("repli disque"), vec![3, 12]);
+    // Sans rien sur disque, l'indisponibilité est rapportée.
+    assert!(matches!(store.weeks(2).await.unwrap_err(), ApiError::UpstreamUnavailable(_)));
+}
+
+#[tokio::test]
+async fn an_imported_week_replaces_the_cached_one_and_joins_the_index() {
+    let server = MockServer::start().await;
+    let cache_dir = tempfile::tempdir().expect("répertoire temporaire");
+    let store = Store::new(&config(&server, cache_dir.path())).expect("store construit");
+
+    let entry = store.import(1, 3, "A1_S3.pdf", A1_S3).await.expect("PDF lisible");
+    assert_eq!(entry.timetable.week, 3);
+    assert_eq!(*store.weeks(1).await.expect("index en mémoire"), vec![3]);
+    assert_eq!(std::fs::read(cache_dir.path().join("A1/A1_S3.pdf")).unwrap(), A1_S3);
+    let cached = store.cached_pdfs(1).await;
+    assert_eq!(cached.len(), 1);
+    assert_eq!(cached[0].courses, Some(entry.timetable.courses.len()));
+
+    let error = store.import(1, 4, "brouillon.pdf", b"pas un PDF").await.unwrap_err();
+    assert!(matches!(error, ApiError::UnreadableUpload { .. }));
+    assert_eq!(*store.weeks(1).await.unwrap(), vec![3], "un dépôt illisible ne laisse aucune trace");
+}
+
+#[tokio::test]
 async fn fetches_and_caches_a_timetable() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
@@ -202,6 +248,7 @@ async fn watching(server: &MockServer, cache_dir: &std::path::Path, state_dir: &
         guild_id: "7".into(),
         known_guild_ids: vec!["5".into()],
         conflict_recipients: Vec::new(),
+        admins: Vec::new(),
         session_secret: "s".repeat(32),
         public_key: None,
         api_base: format!("{}/discord", server.uri()),

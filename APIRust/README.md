@@ -30,6 +30,8 @@ cargo run --release
 | `POST /api/v1/homework/{id}/confirm` | confirmer un devoir de classe |
 | `PUT /api/v1/homework/{id}/done` | cocher « fait », pour soi |
 | `POST /api/v1/discord/interactions` | commandes slash et boutons du bot |
+| `GET/POST /api/v1/admin/pdfs` | PDF en cache par année, et dépôt manuel (champ `A1_S12`) — `EDT_DISCORD_ADMINS` seuls |
+| `GET /api/v1/admin/pdfs/{year}/{week}` | un PDF en cache, tel quel — `EDT_DISCORD_ADMINS` seuls |
 
 L'emploi du temps accepte deux filtres cumulables :
 
@@ -109,6 +111,7 @@ Tout est optionnel ; les valeurs par défaut suffisent en développement.
 | `EDT_DISCORD_GUILD_ID` | — | serveur où les personnes connectées sont ajoutées |
 | `EDT_DISCORD_KNOWN_GUILD_IDS` | — | serveurs où se trouve déjà le bot, séparés par des virgules : leurs membres ne sont pas ajoutés |
 | `EDT_DISCORD_CONFLICT_RECIPIENTS` | — | comptes Discord prévenus des salles réservées par plusieurs cours en même temps, séparés par des virgules : ils reçoivent les nouveaux conflits à chaque changement, et l'état de ceux des semaines à venir à chaque démarrage ; vide, rien n'est signalé |
+| `EDT_DISCORD_ADMINS` | — | comptes Discord, séparés par des virgules, qui consultent les PDF en cache et en déposent à la main (`/api/v1/admin/pdfs`) |
 | `EDT_SESSION_SECRET` | — | clé de signature des sessions (32 caractères au moins) |
 | `EDT_STATE_DIR` | `state` | comptes et classes suivies (`users.json`) |
 | `EDT_LOG` | `info` | filtre de journalisation (`tracing`) |

@@ -34,13 +34,21 @@ variables d'environnement — copier `.env.example` en `.env` pour les changer :
 | `EDT_DISCORD_GUILD_ID` | — | serveur où les personnes connectées sont ajoutées |
 | `EDT_DISCORD_KNOWN_GUILD_IDS` | — | serveurs où se trouve déjà le bot, séparés par des virgules : leurs membres ne sont pas ajoutés |
 | `EDT_DISCORD_CONFLICT_RECIPIENTS` | voir `compose.yaml` | comptes Discord prévenus des salles réservées en double, séparés par des virgules (vide : aucun envoi) |
+| `EDT_DISCORD_ADMINS` | voir `compose.yaml` | comptes Discord qui ouvrent la page `#pdf`, séparés par des virgules |
 | `EDT_SESSION_SECRET` | — | clé de signature des sessions (32 caractères au moins) |
 | `EDT_STATE_DIR` | `state` | comptes et classes suivies (`users.json`) |
 | `EDT_LOG` | `info` | filtre de journalisation de l'API |
 
-Les PDF téléchargés vivent dans le volume `edt-cache` : après un redémarrage,
-le service répond immédiatement, et continue de répondre même si le serveur du
-département est indisponible.
+Les PDF téléchargés vivent dans le volume `edt-cache` : après un redémarrage
+ou un `docker compose up --build`, le service répond immédiatement, et continue
+de répondre même si le serveur du département est indisponible. Seul
+`docker compose down -v` efface ce volume.
+
+Quand le département est injoignable, les comptes de `EDT_DISCORD_ADMINS`
+trouvent sur la page `#pdf` (lien depuis la page Compte) les PDF en cache de
+chaque année, et peuvent y glisser de nouvelles versions : nommées
+`A1_S12.pdf`, elles se rangent seules. Chacune remplace celle de sa semaine,
+jusqu'à ce que le département réponde de nouveau.
 
 Les comptes et les devoirs vivent dans le volume `edt-state` (`users.json`,
 `homework.json`). Chaque écriture est atomique, et la version précédente reste à

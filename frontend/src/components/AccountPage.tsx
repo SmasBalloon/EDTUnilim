@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createResource, createSignal, type Component } from 'solid-js';
-import { LogOut } from 'lucide-solid';
+import { FileText, LogOut } from 'lucide-solid';
 
 import {
   ApiError,
@@ -186,6 +186,12 @@ const Profile: Component<{ me: Me; years: YearSummary[]; onChange: (me: Me | nul
             Déconnexion
           </button>
         </header>
+        <Show when={props.me.admin}>
+          <a class={`${button.plain} w-full`} href="#pdf">
+            <FileText size={14} aria-hidden="true" />
+            PDF en cache et dépôt manuel
+          </a>
+        </Show>
       </section>
 
       <section class={panel}>

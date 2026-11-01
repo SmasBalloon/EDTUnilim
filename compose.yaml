@@ -33,6 +33,9 @@ services:
       EDT_DISCORD_KNOWN_GUILD_IDS: ${EDT_DISCORD_KNOWN_GUILD_IDS:-}
       # Comptes prévenus des salles réservées en double (vide : aucun envoi).
       EDT_DISCORD_CONFLICT_RECIPIENTS: ${EDT_DISCORD_CONFLICT_RECIPIENTS:-429319137710440449,682531276078841881,391597830932004864}
+      # Comptes qui voient les PDF en cache et en déposent quand le serveur du
+      # département est injoignable (page #pdf).
+      EDT_DISCORD_ADMINS: ${EDT_DISCORD_ADMINS:-682531276078841881}
       # Clé publique de l'application : elle allume les commandes slash du bot.
       EDT_DISCORD_PUBLIC_KEY: ${EDT_DISCORD_PUBLIC_KEY:-}
       EDT_SESSION_SECRET: ${EDT_SESSION_SECRET:-}

@@ -87,7 +87,15 @@ Trois niveaux, du plus rapide au plus lent (`store.rs`) :
 
 La liste des semaines publiées est obtenue en lisant l'index Apache du
 répertoire `A{année}/` et en y relevant les liens `A{année}_S{n}.pdf`
-(`parse_week_links`).
+(`parse_week_links`). Si l'index est injoignable, ce sont les PDF présents dans
+`cache/A{année}/` qui en tiennent lieu, jusqu'à ce qu'il réponde de nouveau.
+
+Un administrateur (`EDT_DISCORD_ADMINS`) peut déposer un PDF à la main
+(`POST /api/v1/admin/pdfs`, `Store::import`) : il est analysé, écrit sur disque,
+remplace l'entrée en mémoire et rejoint l'index de son année ; les abonnés sont
+prévenus comme pour une version téléchargée. L'entrée déposée n'a pas de
+validateurs : la revalidation suivante retélécharge la version du département
+dès qu'il répond, et c'est elle qui fait foi.
 
 Une tâche de fond (`refresh_loop` dans `main.rs`) s'exécute toutes les
 `EDT_REFRESH_SECONDS` (900 s par défaut) : elle rafraîchit l'index des semaines,

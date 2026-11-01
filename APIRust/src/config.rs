@@ -52,6 +52,9 @@ pub struct DiscordConfig {
     /// Comptes prévenus en message privé des salles réservées par plusieurs
     /// cours en même temps (enseignants, administration) ; vide, rien ne part.
     pub conflict_recipients: Vec<String>,
+    /// Comptes autorisés à voir les PDF en cache et à en déposer de nouveaux,
+    /// quand le serveur du département est injoignable.
+    pub admins: Vec<String>,
     /// Clé de signature des cookies de session.
     pub session_secret: String,
     /// Clé publique de l'application Discord : sans elle, les commandes slash
@@ -68,6 +71,7 @@ impl std::fmt::Debug for DiscordConfig {
             .field("guild_id", &self.guild_id)
             .field("known_guild_ids", &self.known_guild_ids)
             .field("conflict_recipients", &self.conflict_recipients)
+            .field("admins", &self.admins)
             .field("api_base", &self.api_base)
             .field("slash_commands", &self.public_key.is_some())
             .finish_non_exhaustive()
@@ -148,6 +152,7 @@ fn discord() -> Result<Option<DiscordConfig>, ConfigError> {
         guild_id,
         known_guild_ids: ids("EDT_DISCORD_KNOWN_GUILD_IDS"),
         conflict_recipients: ids("EDT_DISCORD_CONFLICT_RECIPIENTS"),
+        admins: ids("EDT_DISCORD_ADMINS"),
         session_secret,
         public_key: var("EDT_DISCORD_PUBLIC_KEY").map(|key| key.trim().to_owned()),
         api_base: var("EDT_DISCORD_API")
@@ -202,6 +207,7 @@ mod tests {
             "EDT_DISCORD_API",
             "EDT_DISCORD_KNOWN_GUILD_IDS",
             "EDT_DISCORD_CONFLICT_RECIPIENTS",
+            "EDT_DISCORD_ADMINS",
         ]
         .into_iter()
         .chain(DISCORD_VARS)
@@ -289,12 +295,14 @@ mod tests {
         std::env::set_var("EDT_PUBLIC_URL", "https://edt.example/");
         std::env::set_var("EDT_DISCORD_KNOWN_GUILD_IDS", " 111, 222 ,");
         std::env::set_var("EDT_DISCORD_CONFLICT_RECIPIENTS", "333");
+        std::env::set_var("EDT_DISCORD_ADMINS", "444");
 
         let config = Config::from_env().expect("configuration valide");
         let discord = config.discord.as_ref().expect("Discord configuré");
         assert_eq!(discord.api_base, DEFAULT_DISCORD_API);
         assert_eq!(discord.known_guild_ids, ["111", "222"]);
         assert_eq!(discord.conflict_recipients, ["333"]);
+        assert_eq!(discord.admins, ["444"]);
         assert_eq!(config.public_url, "https://edt.example");
         assert!(config.is_https());
         assert!(!format!("{discord:?}").contains("client_secret"), "les secrets restent hors des journaux");

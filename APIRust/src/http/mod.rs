@@ -5,6 +5,7 @@ mod analysis;
 mod homework;
 mod interactions;
 mod meta;
+mod pdfs;
 mod timetable;
 
 use std::sync::Arc;
@@ -92,6 +93,11 @@ pub fn router(config: &Config, store: Arc<Store>, account: Option<Arc<Account>>)
         .route("/api/v1/homework/{id}", put(homework::edit).delete(homework::delete))
         .route("/api/v1/homework/{id}/confirm", post(homework::confirm))
         .route("/api/v1/homework/{id}/done", put(homework::done))
+        .route(
+            "/api/v1/admin/pdfs",
+            get(pdfs::list).post(pdfs::upload).layer(DefaultBodyLimit::max(pdfs::MAX_BODY)),
+        )
+        .route("/api/v1/admin/pdfs/{year}/{week}", get(pdfs::download))
         .route("/api/v1/discord/interactions", post(interactions::handle))
         .fallback(|| async { ApiError::UnknownRoute })
         .layer(CompressionLayer::new())
