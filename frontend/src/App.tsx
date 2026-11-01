@@ -35,6 +35,7 @@ import { settings, update, type ViewMode } from './lib/settings';
 import { centered, cx, note, press, summary as headCards } from './lib/ui';
 import { AccountPage } from './components/AccountPage';
 import { AnalysisPage } from './components/AnalysisPage';
+import { PdfsPage } from './components/PdfsPage';
 import { ChangesBar } from './components/ChangesBar';
 import { ComparePage } from './components/ComparePage';
 import { CourseModal } from './components/CourseModal';
@@ -49,7 +50,7 @@ import { StatusCard } from './components/StatusCard';
 import { WeekBar } from './components/WeekBar';
 import { WeekView } from './components/WeekView';
 
-type Page = 'timetable' | 'compare' | 'teachers' | 'rooms' | 'analysis' | 'todo' | 'account';
+type Page = 'timetable' | 'compare' | 'teachers' | 'rooms' | 'analysis' | 'todo' | 'account' | 'pdfs';
 
 const HASHES: Record<Page, string> = {
   timetable: '',
@@ -59,6 +60,7 @@ const HASHES: Record<Page, string> = {
   analysis: 'analyse',
   todo: 'devoirs',
   account: 'compte',
+  pdfs: 'pdf',
 };
 
 /**
@@ -71,6 +73,7 @@ function pageFromHash(): Page {
   if (location.hash === '#enseignants') return 'teachers';
   if (location.hash === '#analyse') return 'analysis';
   if (location.hash === '#devoirs') return 'todo';
+  if (location.hash === '#pdf') return 'pdfs';
   return location.hash.startsWith('#compte') ? 'account' : 'timetable';
 }
 
@@ -81,6 +84,7 @@ const TITLES: Record<Exclude<Page, 'timetable'>, [string, string]> = {
   analysis: ['Analyse', 'Les salles réservées deux fois dans les PDF que tu déposes.'],
   todo: ['Devoirs', 'Ce qu’il y a à faire, pour toi ou pour ta classe.'],
   account: ['Compte', 'Ta classe et tes messages privés sur Discord.'],
+  pdfs: ['PDF en cache', 'Les emplois du temps gardés par le serveur, et ceux déposés à la main.'],
 };
 
 /**
@@ -328,7 +332,7 @@ export function App() {
       }
       // Les flèches changent de semaine, sur l'emploi du temps comme sur la
       // comparaison : les deux pages en affichent une.
-      if (page() === 'rooms' || page() === 'analysis' || page() === 'account') return;
+      if (page() === 'rooms' || page() === 'analysis' || page() === 'account' || page() === 'pdfs') return;
       if (event.key === 'ArrowLeft') step(-1);
       if (event.key === 'ArrowRight') step(1);
     };
@@ -449,6 +453,8 @@ export function App() {
                   <RoomsPage years={loaded()} onSelect={setSelected} />
                 ) : page() === 'analysis' ? (
                   <AnalysisPage />
+                ) : page() === 'pdfs' ? (
+                  <PdfsPage />
                 ) : page() === 'todo' ? (
                   <TodoPage />
                 ) : page() === 'teachers' ? (

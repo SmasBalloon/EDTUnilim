@@ -44,6 +44,7 @@ async fn setup(upstream: &MockServer) -> Setup {
         guild_id: "7".into(),
         known_guild_ids: Vec::new(),
         conflict_recipients: Vec::new(),
+        admins: Vec::new(),
         session_secret: "s".repeat(32),
         public_key: Some(hex(key.verifying_key().as_bytes())),
         api_base: format!("{}/discord", upstream.uri()),
@@ -86,6 +87,7 @@ async fn setup(upstream: &MockServer) -> Setup {
         signer: Signer::new(&discord_config.session_secret),
         public_url: config.public_url.clone(),
         secure: false,
+        admins: Vec::new(),
     });
 
     let session = |id: &str| Signer::new(&discord_config.session_secret).sign(id, SESSION_TTL);

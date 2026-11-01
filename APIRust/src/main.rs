@@ -64,6 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             signer: Signer::new(&discord_config.session_secret),
             public_url: config.public_url.clone(),
             secure: config.is_https(),
+            admins: discord_config.admins.clone(),
         }));
         info!(public_url = %config.public_url, "connexion Discord et messages privés actifs");
 

@@ -94,6 +94,16 @@ pub fn week_file_name(year: u8, week: u8) -> String {
     format!("A{year}_S{week}.pdf")
 }
 
+/// `A1_S3.pdf` → `(1, 3)` ; `None` pour tout autre nom.
+pub fn parse_week_file_name(name: &str) -> Option<(u8, u8)> {
+    let (year, week) = name.strip_prefix('A')?.strip_suffix(".pdf")?.split_once("_S")?;
+    let all_digits = |part: &str| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit());
+    if !all_digits(year) || !all_digits(week) {
+        return None;
+    }
+    Some((year.parse().ok()?, week.parse().ok()?))
+}
+
 /// Relève les `A1_S3.pdf` dans l'index Apache du répertoire.
 fn parse_week_links(html: &str, year: u8) -> Vec<u8> {
     let prefix = format!("A{year}_S");
@@ -121,6 +131,16 @@ mod tests {
         weeks.sort_unstable();
         weeks.dedup();
         assert_eq!(weeks, vec![1, 12]);
+    }
+
+    #[test]
+    fn reads_year_and_week_from_a_file_name() {
+        assert_eq!(parse_week_file_name("A1_S12.pdf"), Some((1, 12)));
+        assert_eq!(parse_week_file_name(&week_file_name(3, 2)), Some((3, 2)));
+        for name in ["A1_S12.pdf.tmp", "A1_S12.pdf.bak", "A1_S.pdf", "A1_S+2.pdf", "B1_S2.pdf", "A1_S999.pdf"]
+        {
+            assert_eq!(parse_week_file_name(name), None, "{name}");
+        }
     }
 
     #[test]

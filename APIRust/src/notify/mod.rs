@@ -456,6 +456,7 @@ mod tests {
             guild_id: "7".into(),
             known_guild_ids: Vec::new(),
             conflict_recipients: Vec::new(),
+            admins: Vec::new(),
             session_secret: "s".repeat(32),
             public_key: None,
             api_base: server.uri(),

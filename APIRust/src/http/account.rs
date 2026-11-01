@@ -35,6 +35,8 @@ pub struct Account {
     pub public_url: String,
     /// Cookies `Secure` quand le site est en HTTPS.
     pub secure: bool,
+    /// Comptes qui gèrent les PDF en cache (`EDT_DISCORD_ADMINS`).
+    pub admins: Vec<String>,
 }
 
 impl Account {
@@ -60,6 +62,25 @@ impl Account {
         let token = session::read_cookie(headers, SESSION_COOKIE).ok_or(ApiError::Unauthenticated)?;
         let id = self.signer.verify(&token).ok_or(ApiError::Unauthenticated)?;
         self.users.get(&id).await.ok_or(ApiError::Unauthenticated)
+    }
+
+    /// La personne connectée, si elle gère les PDF en cache.
+    pub async fn admin_from(&self, headers: &HeaderMap) -> Result<User, ApiError> {
+        let user = self.user_from(headers).await?;
+        if self.is_admin(&user) {
+            Ok(user)
+        } else {
+            Err(ApiError::Forbidden("réservé aux administrateurs"))
+        }
+    }
+
+    fn is_admin(&self, user: &User) -> bool {
+        self.admins.contains(&user.id)
+    }
+
+    fn view(&self, user: User) -> Me {
+        let admin = self.is_admin(&user);
+        Me { admin, ..Me::from(user) }
     }
 
     fn clear_session(&self) -> String {
@@ -154,6 +175,8 @@ pub struct Me {
     year: Option<u8>,
     group: Option<String>,
     notify: bool,
+    /// Gère les PDF en cache : la page d'import lui est ouverte.
+    admin: bool,
 }
 
 impl From<User> for Me {
@@ -169,6 +192,7 @@ impl From<User> for Me {
             year: user.year,
             group: user.group,
             notify: user.notify,
+            admin: false,
         }
     }
 }
@@ -177,7 +201,7 @@ impl From<User> for Me {
 pub async fn me(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Result<Response, ApiError> {
     let account = account(&state)?;
     let user = account.user_from(&headers).await?;
-    Ok(([(axum::http::header::CACHE_CONTROL, "no-store")], Json(Me::from(user))).into_response())
+    Ok(([(axum::http::header::CACHE_CONTROL, "no-store")], Json(account.view(user))).into_response())
 }
 
 #[derive(Deserialize)]
@@ -257,7 +281,7 @@ pub async fn update(
         Delivery::None
     };
 
-    Ok(Json(Updated { user: Me::from(user), dm }))
+    Ok(Json(Updated { user: account.view(user), dm }))
 }
 
 /// Ferme la session.
