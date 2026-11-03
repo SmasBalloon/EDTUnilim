@@ -34,8 +34,18 @@ fn same_slot(a: &Course, b: &Course) -> bool {
 
 /// Compare deux versions d'une semaine, pour les cours d'un demi-groupe.
 pub fn diff<'a>(before: &'a Timetable, after: &'a Timetable, group: &str) -> Changes<'a> {
-    let before: Vec<&Course> = before.courses.iter().filter(|course| course.concerns(group)).collect();
-    let after: Vec<&Course> = after.courses.iter().filter(|course| course.concerns(group)).collect();
+    compare(before, after, |course| course.concerns(group))
+}
+
+/// Compare deux versions d'une semaine, tous groupes confondus : ce qu'un
+/// salon de promo doit apprendre.
+pub fn diff_all<'a>(before: &'a Timetable, after: &'a Timetable) -> Changes<'a> {
+    compare(before, after, |_| true)
+}
+
+fn compare<'a>(before: &'a Timetable, after: &'a Timetable, keep: impl Fn(&Course) -> bool) -> Changes<'a> {
+    let before: Vec<&Course> = before.courses.iter().filter(|course| keep(course)).collect();
+    let after: Vec<&Course> = after.courses.iter().filter(|course| keep(course)).collect();
 
     let mut removed: Vec<&Course> =
         before.iter().copied().filter(|old| !after.iter().any(|new| same_course(old, new))).collect();
@@ -83,5 +93,14 @@ mod tests {
         assert_eq!(changes.modified.len(), 1);
         assert_eq!(changes.added.len(), 1);
         assert_eq!(changes.removed.len(), 1);
+    }
+
+    #[test]
+    fn compares_every_group_at_once() {
+        let before = week(vec![course(600, "G1A", "104"), course(600, "G3A", "105")]);
+        let after = week(vec![course(600, "G1A", "104"), course(600, "G3A", "208")]);
+        assert!(diff(&before, &after, "G1a").is_empty());
+        assert_eq!(diff_all(&before, &after).modified.len(), 1);
+        assert!(diff_all(&before, &before).is_empty());
     }
 }

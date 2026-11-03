@@ -7,6 +7,7 @@
 
 mod diff;
 mod messages;
+mod render;
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
@@ -16,13 +17,15 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
 
-pub use self::diff::{diff, Changes};
+pub use self::diff::{diff, diff_all, Changes};
 use self::messages::short_label;
 pub use self::messages::{
-    change_messages, conflict_messages, conflict_report, describe_homework, published_message,
+    change_messages, channel_changes, channel_heading, conflict_messages, conflict_report, describe_homework,
+    published_message,
 };
+use crate::channels::{ChannelStore, ChannelSubscription};
 use crate::conflicts::{self, Conflict};
-use crate::discord::{Attachment, Button, ButtonStyle, Discord, DiscordError};
+use crate::discord::{Attachment, Button, ButtonStyle, Discord, DiscordError, Mention};
 use crate::homework::Homework;
 use crate::ics;
 use crate::model::Timetable;
@@ -90,11 +93,94 @@ pub struct Notifier {
     /// Comptes Discord prévenus des salles réservées en double (enseignants,
     /// administration) ; vide, rien n'est cherché ni envoyé.
     conflict_recipients: Arc<[String]>,
+    /// Salons abonnés avec `/salon ajouter` ; absents, rien n'y est annoncé.
+    channels: Option<Arc<ChannelStore>>,
 }
 
 impl Notifier {
     pub fn new(discord: Discord, users: Arc<UserStore>) -> Self {
-        Self { discord, users, conflict_recipients: Arc::from([]) }
+        Self { discord, users, conflict_recipients: Arc::from([]), channels: None }
+    }
+
+    /// Annonce aussi les semaines dans les salons abonnés.
+    pub fn with_channels(mut self, channels: Arc<ChannelStore>) -> Self {
+        self.channels = Some(channels);
+        self
+    }
+
+    pub fn channels(&self) -> Option<&Arc<ChannelStore>> {
+        self.channels.as_ref()
+    }
+
+    pub fn discord(&self) -> &Discord {
+        &self.discord
+    }
+
+    // --- Salons ------------------------------------------------------------
+
+    /// Annonce une semaine dans les salons qui suivent son année.
+    ///
+    /// Toujours l'en-tête, l'image de la semaine et le PDF ; pour une semaine
+    /// republiée (`before` présent), suivis de la liste de ce qui a bougé,
+    /// tous groupes confondus. Une republication sans
+    /// changement de créneau n'est pas annoncée.
+    pub async fn to_channels(&self, before: Option<&Timetable>, after: &Timetable, pdf: Option<&[u8]>) {
+        let Some(channels) = &self.channels else { return };
+        let subscriptions = channels.for_year(after.year).await;
+        if subscriptions.is_empty() {
+            return;
+        }
+        let changes = before.map(|before| diff_all(before, after));
+        if changes.as_ref().is_some_and(Changes::is_empty) {
+            return;
+        }
+
+        let name = format!("A{}_S{}", after.year, after.week);
+        let pdf = pdf.map(|bytes| Attachment { filename: format!("{name}.pdf"), content: bytes.to_vec() });
+        // L'image se rend une fois pour tous les salons.
+        let image = match &pdf {
+            Some(pdf) => render::png(&pdf.content)
+                .await
+                .map(|content| Attachment { filename: format!("{name}.png"), content }),
+            None => None,
+        };
+        let files: Vec<&Attachment> = image.iter().chain(pdf.iter()).collect();
+        let details = changes.as_ref().map(channel_changes).unwrap_or_default();
+
+        let (mut sent, mut failed) = (0, 0);
+        for subscription in &subscriptions {
+            match self.announce_in(subscription, after, changes.is_some(), &files, &details).await {
+                Ok(()) => sent += 1,
+                Err(error) => {
+                    failed += 1;
+                    warn!(%error, channel = subscription.channel_id, "annonce dans le salon impossible");
+                }
+            }
+        }
+        info!(year = after.year, week = after.week, sent, failed, "semaine annoncée dans les salons");
+    }
+
+    async fn announce_in(
+        &self,
+        subscription: &ChannelSubscription,
+        timetable: &Timetable,
+        updated: bool,
+        files: &[&Attachment],
+        details: &[String],
+    ) -> Result<(), DiscordError> {
+        let mention_text = subscription.mention_text();
+        let mention = match &subscription.mention {
+            None => Mention::Nobody,
+            Some(role) if *role == subscription.guild_id => Mention::Everyone,
+            Some(role) => Mention::Role(role),
+        };
+        let heading = channel_heading(timetable, updated, mention_text.as_deref());
+        let channel = &subscription.channel_id;
+        self.discord.send_to_channel(channel, &heading, files, mention).await?;
+        for message in details {
+            self.discord.send_to_channel(channel, message, &[], Mention::Nobody).await?;
+        }
+        Ok(())
     }
 
     /// Prévient ces comptes Discord des salles réservées en double.
@@ -775,6 +861,89 @@ mod tests {
         bench.notifier.announce_confirmed(homework("Exercices"));
         // Le temps que les deux annonces partent avant la vérification des attentes.
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    }
+
+    // --- Salons d'annonces ---------------------------------------------------
+
+    /// Le banc d'essai, avec le salon `555` abonné à la première année.
+    async fn with_channel(mut bench: Bench, mention: Option<&str>) -> (Bench, tempfile::TempDir) {
+        let dir = tempfile::tempdir().expect("répertoire temporaire");
+        let channels = Arc::new(ChannelStore::open(dir.path()).await.expect("salons"));
+        channels
+            .set(ChannelSubscription {
+                guild_id: "7".into(),
+                channel_id: "555".into(),
+                year: 1,
+                mention: mention.map(str::to_owned),
+                added_by: "42".into(),
+                created_at: time::OffsetDateTime::UNIX_EPOCH,
+            })
+            .await
+            .expect("abonné");
+        bench.notifier = bench.notifier.with_channels(channels);
+        (bench, dir)
+    }
+
+    /// Comme `body_string_contains`, pour un corps multipart qui porte un PDF binaire.
+    struct BodyHas(&'static str);
+
+    impl wiremock::Match for BodyHas {
+        fn matches(&self, request: &wiremock::Request) -> bool {
+            request.body.windows(self.0.len()).any(|window| window == self.0.as_bytes())
+        }
+    }
+
+    fn pdf() -> Vec<u8> {
+        std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/A3_S2.pdf")).expect("PDF")
+    }
+
+    #[tokio::test]
+    async fn announces_a_new_week_with_its_pdf_and_image() {
+        let (bench, _dir) = with_channel(bench().await, Some("7")).await;
+        let mut announcement = Mock::given(method("POST"))
+            .and(path("/channels/555/messages"))
+            .and(BodyHas("Nouvel emploi du temps"))
+            .and(BodyHas("@everyone"))
+            .and(BodyHas("A1_S3.pdf"));
+        // Sans poppler sur la machine de test, l'annonce part sans image.
+        if render::png(&pdf()).await.is_some() {
+            announcement = announcement.and(BodyHas("A1_S3.png"));
+        }
+        announcement
+            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
+            .expect(1)
+            .mount(&bench.server)
+            .await;
+        bench.notifier.to_channels(None, &week(vec![course(600, "G1A", "104")]), Some(&pdf())).await;
+        // Une autre année n'est pas annoncée dans ce salon.
+        let mut other = week(vec![course(600, "G1A", "104")]);
+        other.year = 2;
+        bench.notifier.to_channels(None, &other, Some(&pdf())).await;
+    }
+
+    #[tokio::test]
+    async fn announces_a_change_with_the_image_the_pdf_and_the_list() {
+        let (bench, _dir) = with_channel(bench().await, None).await;
+        Mock::given(method("POST"))
+            .and(path("/channels/555/messages"))
+            .and(BodyHas("Emploi du temps mis à jour"))
+            .and(BodyHas("A1_S3.pdf"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
+            .expect(1)
+            .mount(&bench.server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/channels/555/messages"))
+            .and(BodyHas("salle 104 → 208"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
+            .expect(1)
+            .mount(&bench.server)
+            .await;
+        let before = week(vec![course(600, "G1A", "104")]);
+        let after = week(vec![course(600, "G1A", "208")]);
+        bench.notifier.to_channels(Some(&before), &after, Some(&pdf())).await;
+        // Republiée sans changement : rien n'est annoncé.
+        bench.notifier.to_channels(Some(&after), &after, Some(&pdf())).await;
     }
 
     #[tokio::test]

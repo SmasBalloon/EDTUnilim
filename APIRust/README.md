@@ -207,6 +207,19 @@ propager la première fois.
 | --- | --- |
 | `/devoirs [matiere] [etat]` | liste ce qui est à faire, avec un bouton « fait » |
 | `/devoir ajouter intitule:… [matiere] [pour] [portee] [details]` | note un devoir |
+| `/salon ajouter salon:#… annee:… [mention:@rôle]` | annonce les emplois du temps d'une année dans ce salon |
+| `/salon retirer salon:#… [annee]` | arrête les annonces (d'une année, ou toutes) |
+| `/salon liste` | les salons d'annonces du serveur |
+
+`/salon` est réservée à qui peut **gérer le serveur**, et ne se lance que dans
+un serveur. Dans un salon abonné, chaque semaine nouvelle ou republiée arrive
+avec son image et son PDF ; une semaine republiée est suivie de la liste des
+créneaux ajoutés, retirés ou modifiés (tous groupes). Une republication sans
+changement n'est pas annoncée. L'image est rendue par `pdftoppm`
+(`poppler-utils`, installé dans l'image Docker) ; sans lui, l'annonce part
+sans image. Le bot doit pouvoir *voir le salon*, *envoyer des messages*,
+*joindre des fichiers* et, pour `@everyone`, *mentionner @everyone*. Les
+abonnements sont dans `channels.json`, à côté des comptes.
 
 Les réponses sont éphémères : elles ne s'affichent que pour la personne qui a
 tapé la commande. Les commandes se redéclarent à chaque démarrage du service,

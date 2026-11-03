@@ -114,6 +114,13 @@ pub fn change_messages(after: &Timetable, group: &str, changes: &Changes) -> Vec
         heading(after.year, after.week, &after.period),
         group.to_uppercase()
     )];
+    lines.extend(change_lines(changes));
+    pack(lines)
+}
+
+/// Une ligne par créneau ajouté, retiré ou modifié.
+fn change_lines(changes: &Changes) -> Vec<String> {
+    let mut lines = Vec::new();
     for (before, now) in &changes.modified {
         lines.push(format!("✏️ {} · {} — {}", when(now), what(now), what_changed(before, now)));
     }
@@ -123,7 +130,69 @@ pub fn change_messages(after: &Timetable, group: &str, changes: &Changes) -> Vec
     for course in &changes.removed {
         lines.push(format!("➖ ~~{} · {}~~", when(course), what(course)));
     }
+    lines
+}
+
+/// L'en-tête d'une annonce dans un salon, au-dessus de l'image et du PDF :
+///
+/// ```text
+/// 🆕 **Nouvel emploi du temps !**
+///
+/// **Semaine 8** · BUT 3 · du 12/10 au 17/10
+/// Publié le : 2026-10-09 14:32 @everyone
+/// ```
+pub fn channel_heading(timetable: &Timetable, updated: bool, mention: Option<&str>) -> String {
+    let (title, stamp) = if updated {
+        ("📅 **Emploi du temps mis à jour !**", "Dernière modification")
+    } else {
+        ("🆕 **Nouvel emploi du temps !**", "Publié le")
+    };
+    let period = &timetable.period;
+    let mut text = format!(
+        "{title}\n\n**Semaine {}** · BUT {} · du {} au {}",
+        timetable.week,
+        timetable.year,
+        short_date(period.start),
+        short_date(period.end)
+    );
+    let created = created_at(&period.label);
+    match (created, mention) {
+        (Some(created), Some(mention)) => text.push_str(&format!("\n{stamp} : {created} {mention}")),
+        (Some(created), None) => text.push_str(&format!("\n{stamp} : {created}")),
+        (None, Some(mention)) => text.push_str(&format!("\n{mention}")),
+        (None, None) => {}
+    }
+    text
+}
+
+/// La liste des changements sous une annonce de salon, découpée en messages.
+pub fn channel_changes(changes: &Changes) -> Vec<String> {
+    let mut lines = vec![format!("**{} :**", plural(changes))];
+    lines.extend(change_lines(changes));
     pack(lines)
+}
+
+fn plural(changes: &Changes) -> &'static str {
+    match changes.added.len() + changes.removed.len() + changes.modified.len() {
+        1 => "Modification",
+        _ => "Modifications",
+    }
+}
+
+/// La date de création que le département écrit dans le titre du PDF :
+/// `… Date et heure de création : 2/9/2026 -- 9:6:29 --` → `2026-09-02 09:06`.
+fn created_at(label: &str) -> Option<String> {
+    let rest = &label[label.find("création")? + "création".len()..];
+    let rest = rest.trim_start_matches([' ', ':']);
+    let (date, rest) = rest.split_once("--")?;
+    let mut date = date.trim().split('/').map(|part| part.trim().parse::<u32>());
+    let (day, month, year) = (date.next()?.ok()?, date.next()?.ok()?, date.next()?.ok()?);
+    let mut clock = rest.trim().split(|c: char| c == ':' || c.is_whitespace()).map(str::parse::<u32>);
+    let (hour, minute) = (clock.next()?.ok()?, clock.next()?.ok()?);
+    if !(1..=31).contains(&day) || !(1..=12).contains(&month) || hour > 23 || minute > 59 {
+        return None;
+    }
+    Some(format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}"))
 }
 
 /// Les salles réservées en double, une ligne par salle disputée et un cours
@@ -212,6 +281,40 @@ mod tests {
         assert!(text.contains("salle 104 → 208"), "{text}");
         assert!(text.contains("➕ mar. 15/09 08:00–10:00"), "{text}");
         assert!(text.contains("➖ ~~mar. 15/09 14:00–16:00"), "{text}");
+    }
+
+    #[test]
+    fn reads_the_creation_date_of_the_pdf() {
+        let label = "EMPLOI DU TEMPS - Semaine 2 (37) : du 07/09/2026 au 12/09/2026 -- Date et heure de création : 2/9/2026 -- 9:6:29 --";
+        assert_eq!(created_at(label).as_deref(), Some("2026-09-02 09:06"));
+        assert_eq!(created_at("EMPLOI DU TEMPS - Semaine 2"), None);
+        assert_eq!(created_at("création : 40/9/2026 -- 9:6:29"), None);
+    }
+
+    #[test]
+    fn heads_a_channel_announcement_like_the_department_board() {
+        let mut timetable = week(vec![course(600, "G1A", "104")]);
+        timetable.period.label = "… -- Date et heure de création : 16/10/2026 -- 9:1:00 --".into();
+        let text = channel_heading(&timetable, true, Some("@everyone"));
+        assert!(text.starts_with("📅 **Emploi du temps mis à jour !**\n\n**Semaine 3** · BUT 1"), "{text}");
+        assert!(text.ends_with("Dernière modification : 2026-10-16 09:01 @everyone"), "{text}");
+
+        let text = channel_heading(&timetable, false, None);
+        assert!(text.starts_with("🆕 **Nouvel emploi du temps !**"), "{text}");
+        assert!(text.ends_with("Publié le : 2026-10-16 09:01"), "{text}");
+
+        timetable.period.label.clear();
+        assert!(channel_heading(&timetable, false, Some("<@&5>")).ends_with("\n<@&5>"));
+    }
+
+    #[test]
+    fn lists_the_changes_under_a_channel_announcement() {
+        let before = week(vec![course(600, "G1A", "104"), course(600, "G3A", "105")]);
+        let after = week(vec![course(600, "G1A", "208"), course(600, "G3A", "105")]);
+        let text = channel_changes(&diff::diff_all(&before, &after)).join("\n");
+        assert!(text.starts_with("**Modification :**"), "{text}");
+        assert!(text.contains("✏️ mar. 15/09 10:00–12:00 · TP R1.05 · G1A · salle 208"), "{text}");
+        assert!(!text.contains("G3A"), "{text}");
     }
 
     #[test]

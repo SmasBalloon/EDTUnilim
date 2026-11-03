@@ -1,4 +1,4 @@
-//! Les commandes du bot : `/devoirs`, `/devoir ajouter`, et les boutons.
+//! Les commandes du bot : `/devoirs`, `/devoir ajouter`, `/salon`, et les boutons.
 //!
 //! Discord n'appelle pas le bot, il appelle cette route : chaque commande
 //! arrive en HTTP, signée, et la réponse part dans le même échange. Pas de
@@ -22,6 +22,9 @@ use serde_json::{json, Value};
 use time::{Date, Duration, OffsetDateTime};
 use tracing::{info, warn};
 
+use crate::channels::ChannelSubscription;
+use crate::config::YEARS;
+use crate::discord::{DiscordError, Mention};
 use crate::error::ApiError;
 use crate::homework::{Audience, Homework, NewHomework};
 use crate::notify::describe_homework;
@@ -36,6 +39,12 @@ const EPHEMERAL: u64 = 64;
 const LISTED: usize = 15;
 /// Discord n'accepte pas plus de cinq boutons par ligne.
 const BUTTONS: usize = 5;
+/// « Gérer le serveur » : la permission demandée pour choisir le salon des annonces.
+const MANAGE_GUILD: u64 = 1 << 5;
+const ADMINISTRATOR: u64 = 1 << 3;
+/// Le message d'essai dans le salon doit laisser le temps de répondre à
+/// Discord, qui n'attend la réponse à une commande que trois secondes.
+const CHANNEL_CHECK: std::time::Duration = std::time::Duration::from_millis(2200);
 
 /// Ce que Discord envoie. On n'y lit que ce dont on se sert.
 #[derive(Debug, Deserialize)]
@@ -49,11 +58,17 @@ struct Interaction {
     user: Option<DiscordUser>,
     #[serde(default)]
     member: Option<Member>,
+    /// Le serveur où la commande a été lancée ; absent en message privé.
+    #[serde(default)]
+    guild_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Member {
     user: DiscordUser,
+    /// Les permissions de la personne dans ce salon, en entier décimal.
+    #[serde(default)]
+    permissions: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,6 +79,18 @@ struct DiscordUser {
 impl Interaction {
     fn author(&self) -> Option<&str> {
         self.user.as_ref().or(self.member.as_ref().map(|member| &member.user)).map(|user| user.id.as_str())
+    }
+
+    /// Peut gérer le serveur : Discord le vérifie déjà d'après la commande,
+    /// mais un administrateur du serveur peut avoir élargi ce droit.
+    fn manages_guild(&self) -> bool {
+        let permissions = self
+            .member
+            .as_ref()
+            .and_then(|member| member.permissions.as_deref())
+            .and_then(|text| text.parse::<u64>().ok())
+            .unwrap_or(0);
+        permissions & (MANAGE_GUILD | ADMINISTRATOR) != 0
     }
 }
 
@@ -123,7 +150,55 @@ pub fn commands() -> Value {
                 ],
             }],
         },
+        {
+            "name": "salon",
+            "description": "Annoncer les emplois du temps dans un salon du serveur",
+            // Dans un serveur seulement, et réservée à qui peut le gérer.
+            "contexts": [0],
+            "default_member_permissions": MANAGE_GUILD.to_string(),
+            "options": [
+                {
+                    "type": 1,
+                    "name": "ajouter",
+                    "description": "Annoncer dans ce salon les emplois du temps d'une année",
+                    "options": [
+                        {
+                            "type": 7,
+                            "name": "salon",
+                            "description": "Le salon des annonces",
+                            "required": true,
+                            // Salon textuel ou d'annonces.
+                            "channel_types": [0, 5],
+                        },
+                        year_option(true),
+                        {
+                            "type": 8,
+                            "name": "mention",
+                            "description": "Rôle mentionné à chaque annonce (@everyone possible)",
+                            "required": false,
+                        },
+                    ],
+                },
+                {
+                    "type": 1,
+                    "name": "retirer",
+                    "description": "Ne plus rien annoncer dans ce salon",
+                    "options": [
+                        { "type": 7, "name": "salon", "description": "Le salon", "required": true, "channel_types": [0, 5] },
+                        year_option(false),
+                    ],
+                },
+                { "type": 1, "name": "liste", "description": "Les salons d'annonces de ce serveur" },
+            ],
+        },
     ])
+}
+
+fn year_option(required: bool) -> Value {
+    let choices: Vec<Value> =
+        YEARS.iter().map(|year| json!({ "name": format!("BUT {year}"), "value": year })).collect();
+    let description = if required { "L'année annoncée" } else { "L'année à retirer (toutes sinon)" };
+    json!({ "type": 4, "name": "annee", "description": description, "required": required, "choices": choices })
 }
 
 /// Point d'entrée déclaré dans le portail Discord.
@@ -192,6 +267,12 @@ fn from_hex<const N: usize>(text: &str) -> Option<[u8; N]> {
 async fn command(state: &Arc<AppState>, interaction: &Interaction) -> Value {
     let Some(data) = &interaction.data else { return reply("Commande vide.") };
     let name = data.get("name").and_then(Value::as_str).unwrap_or_default();
+
+    // Choisir un salon ne demande pas de compte sur le site : c'est l'affaire
+    // de qui gère le serveur, pas d'un étudiant.
+    if name == "salon" {
+        return channel_command(state, interaction, data).await;
+    }
 
     let Ok(user) = who(state, interaction).await else {
         return reply(&format!(
@@ -336,6 +417,125 @@ async fn add_command(state: &Arc<AppState>, user: &User, data: &Value) -> Value 
     }
 }
 
+// --- Salons d'annonces ------------------------------------------------------
+
+/// `/salon ajouter salon:… annee:… [mention]`, `/salon retirer salon:… [annee]`, `/salon liste`
+async fn channel_command(state: &Arc<AppState>, interaction: &Interaction, data: &Value) -> Value {
+    let Some(guild_id) = interaction.guild_id.as_deref() else {
+        return reply("Cette commande se lance dans un serveur.");
+    };
+    if !interaction.manages_guild() {
+        return reply("Il faut pouvoir gérer le serveur pour choisir le salon des annonces.");
+    }
+    let Ok(account) = state.account() else { return reply("Les comptes sont éteints ici.") };
+    let Some(channels) = account.notifier.channels() else {
+        return reply("Les annonces dans les salons sont éteintes ici.");
+    };
+    let Some(sub) = data.get("options").and_then(Value::as_array).and_then(|options| options.first()) else {
+        return reply("Utilisation : `/salon ajouter`, `/salon retirer` ou `/salon liste`.");
+    };
+    let channel = option(sub, "salon");
+    let year =
+        integer(sub, "annee").and_then(|year| u8::try_from(year).ok()).filter(|year| YEARS.contains(year));
+
+    match sub["name"].as_str().unwrap_or_default() {
+        "ajouter" => {
+            let (Some(channel_id), Some(year)) = (channel, year) else {
+                return reply("Il faut un salon et une année.");
+            };
+            let subscription = ChannelSubscription {
+                guild_id: guild_id.to_owned(),
+                channel_id,
+                year,
+                mention: option(sub, "mention"),
+                added_by: interaction.author().unwrap_or_default().to_owned(),
+                created_at: OffsetDateTime::now_utc(),
+            };
+
+            // Un message d'essai : mieux vaut découvrir maintenant qu'il manque
+            // une permission qu'à la prochaine mise à jour de l'emploi du temps.
+            let hello = format!(
+                "✅ Ce salon recevra les emplois du temps de **BUT {year}** : l'image et le PDF de chaque nouvelle semaine, puis à chaque mise à jour, avec la liste des changements."
+            );
+            let check =
+                account.discord.send_to_channel(&subscription.channel_id, &hello, &[], Mention::Nobody);
+            match tokio::time::timeout(CHANNEL_CHECK, check).await {
+                Ok(Ok(())) | Err(_) => {}
+                Ok(Err(DiscordError::Refused { .. })) => {
+                    return reply(&format!(
+                        "Je ne peux pas écrire dans <#{}>. Donne-moi les permissions *Voir le salon*, *Envoyer des messages* et *Joindre des fichiers*{}.",
+                        subscription.channel_id,
+                        if subscription.mention.is_some() { ", et *Mentionner @everyone* pour la mention" } else { "" },
+                    ));
+                }
+                Ok(Err(error)) => {
+                    warn!(%error, "salon d'annonces injoignable");
+                    return reply("Discord ne répond pas, réessaie dans un instant.");
+                }
+            }
+
+            let summary = format!(
+                "📣 <#{}> annoncera les emplois du temps de BUT {year}{}.",
+                subscription.channel_id,
+                subscription
+                    .mention_text()
+                    .map(|mention| format!(", en mentionnant {mention}"))
+                    .unwrap_or_default(),
+            );
+            match channels.set(subscription).await {
+                Ok(()) => {
+                    info!(guild = guild_id, year, "salon d'annonces ajouté");
+                    reply(&summary)
+                }
+                Err(error) => {
+                    warn!(%error, "salon d'annonces non enregistré");
+                    reply("Je n'ai pas réussi à l'enregistrer. Réessaie dans un instant.")
+                }
+            }
+        }
+        "retirer" => {
+            let Some(channel_id) = channel else { return reply("Il faut un salon.") };
+            // Seul un salon de ce serveur peut être retiré d'ici.
+            if !channels.in_guild(guild_id).await.iter().any(|item| item.channel_id == channel_id) {
+                return reply(&format!("<#{channel_id}> n'annonce rien."));
+            }
+            match channels.remove(&channel_id, year).await {
+                Ok(0) => reply(&format!("<#{channel_id}> n'annonce pas cette année.")),
+                Ok(_) => {
+                    info!(guild = guild_id, ?year, "salon d'annonces retiré");
+                    let what = year.map_or_else(|| "rien".to_owned(), |year| format!("BUT {year}"));
+                    reply(&format!("🔕 <#{channel_id}> n'annoncera plus {what}."))
+                }
+                Err(error) => {
+                    warn!(%error, "salon d'annonces non retiré");
+                    reply("Je n'ai pas réussi à le retirer. Réessaie dans un instant.")
+                }
+            }
+        }
+        "liste" => {
+            let items = channels.in_guild(guild_id).await;
+            if items.is_empty() {
+                return reply("Aucun salon n'annonce les emplois du temps sur ce serveur. `/salon ajouter` pour en choisir un.");
+            }
+            let lines: Vec<String> = items
+                .iter()
+                .map(|item| {
+                    let mention = item
+                        .mention_text()
+                        .map(|mention| format!(" · mentionne {mention}"))
+                        .unwrap_or_default();
+                    format!("• <#{}> · BUT {}{mention}", item.channel_id, item.year)
+                })
+                .collect();
+            reply(&format!("📣 Salons d'annonces :\n{}", lines.join("\n")))
+        }
+        other => {
+            warn!(command = other, "sous-commande de salon inconnue");
+            reply("Cette commande n'existe pas.")
+        }
+    }
+}
+
 // --- Boutons ----------------------------------------------------------------
 
 async fn button(state: &Arc<AppState>, interaction: &Interaction) -> Value {
@@ -410,6 +610,11 @@ fn option(data: &Value, name: &str) -> Option<String> {
         .get("value")?
         .as_str()
         .map(str::to_owned)
+}
+
+/// Une option entière de commande, par son nom.
+fn integer(data: &Value, name: &str) -> Option<i64> {
+    data.get("options")?.as_array()?.iter().find(|option| option["name"] == name)?.get("value")?.as_i64()
 }
 
 /// `G1a` → `G1` : la portée « mon groupe » vise les deux moitiés.
@@ -496,7 +701,15 @@ mod tests {
         let declared = commands();
         let names: Vec<&str> =
             declared.as_array().expect("liste").iter().filter_map(|c| c["name"].as_str()).collect();
-        assert_eq!(names, ["devoirs", "devoir"]);
+        assert_eq!(names, ["devoirs", "devoir", "salon"]);
+
+        let channel = &declared[2];
+        assert_eq!(channel["contexts"], json!([0]), "dans un serveur seulement");
+        assert_eq!(channel["default_member_permissions"], "32");
+        let add = &channel["options"][0];
+        assert_eq!(add["options"][0]["type"], 7, "un salon");
+        assert_eq!(add["options"][1]["choices"].as_array().map(Vec::len), Some(YEARS.len()));
+        assert_eq!(add["options"][2]["type"], 8, "un rôle");
 
         let list = &declared[0];
         assert_eq!(list["options"][1]["choices"].as_array().map(Vec::len), Some(3));
@@ -521,6 +734,32 @@ mod tests {
         let in_dm: Interaction =
             serde_json::from_value(json!({ "type": 2, "user": { "id": "8" } })).expect("message privé");
         assert_eq!(in_dm.author(), Some("8"));
+    }
+
+    #[test]
+    fn requires_the_right_to_manage_the_server() {
+        let with = |permissions: &str| -> Interaction {
+            serde_json::from_value(json!({
+                "type": 2,
+                "guild_id": "7",
+                "member": { "user": { "id": "1" }, "permissions": permissions },
+            }))
+            .expect("interaction")
+        };
+        assert!(with("32").manages_guild());
+        assert!(with("8").manages_guild(), "un administrateur aussi");
+        assert!(!with("2048").manages_guild());
+        assert!(!with("n'importe quoi").manages_guild());
+        let in_dm: Interaction =
+            serde_json::from_value(json!({ "type": 2, "user": { "id": "8" } })).expect("dm");
+        assert!(!in_dm.manages_guild());
+    }
+
+    #[test]
+    fn reads_integer_options() {
+        let data = json!({ "options": [{ "name": "annee", "value": 3 }] });
+        assert_eq!(integer(&data, "annee"), Some(3));
+        assert_eq!(integer(&data, "autre"), None);
     }
 
     #[test]

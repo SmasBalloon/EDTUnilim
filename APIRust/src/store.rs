@@ -336,16 +336,25 @@ impl Store {
         };
         info!(year, week, courses = entry.timetable.courses.len(), file, "emploi du temps déposé à la main");
 
-        if let Some(notifier) = &self.notifier {
-            let others = self.same_dates(&entry.timetable);
-            let others: Vec<&Timetable> = others.iter().map(|other| &other.timetable).collect();
-            match &previous {
-                Some(previous) => notifier.week_changed(&previous.timetable, &entry.timetable, &others).await,
-                None if published => notifier.week_published(&entry.timetable, &others).await,
-                None => {}
-            }
+        match &previous {
+            Some(previous) => self.announce(Some(&previous.timetable), &entry.timetable, Some(bytes)).await,
+            None if published => self.announce(None, &entry.timetable, Some(bytes)).await,
+            None => {}
         }
         Ok(entry)
+    }
+
+    /// Prévient d'une semaine publiée (`previous` absent) ou republiée : les
+    /// abonnés en message privé, les salons abonnés avec le PDF.
+    async fn announce(&self, previous: Option<&Timetable>, timetable: &Timetable, pdf: Option<&[u8]>) {
+        let Some(notifier) = &self.notifier else { return };
+        let others = self.same_dates(timetable);
+        let others: Vec<&Timetable> = others.iter().map(|other| &other.timetable).collect();
+        match previous {
+            Some(before) => notifier.week_changed(before, timetable, &others).await,
+            None => notifier.week_published(timetable, &others).await,
+        }
+        notifier.to_channels(previous, timetable, pdf).await;
     }
 
     /// Met en cache les semaines publiées qui n'y sont pas encore, pour que
@@ -369,11 +378,9 @@ impl Store {
             match self.timetable(year, week).await {
                 Ok(entry) if published => {
                     info!(year, week, "nouvelle semaine publiée");
-                    if let Some(notifier) = &self.notifier {
-                        let others = self.same_dates(&entry.timetable);
-                        let others: Vec<&Timetable> = others.iter().map(|other| &other.timetable).collect();
-                        notifier.week_published(&entry.timetable, &others).await;
-                    }
+                    // `timetable` vient de l'écrire sur disque.
+                    let pdf = self.cached_pdf(year, week).await;
+                    self.announce(None, &entry.timetable, pdf.as_deref()).await;
                 }
                 Ok(_) => {}
                 Err(error) => warn!(%error, year, week, "semaine publiée illisible"),
@@ -428,6 +435,7 @@ impl Store {
             Ok(Fetch::Fresh(document)) => {
                 let bytes = document.bytes.len();
                 self.write_to_disk(year, week, &document.bytes).await;
+                let pdf = document.bytes.clone();
                 match self.store(year, week, document) {
                     Ok(entry) => {
                         info!(
@@ -438,12 +446,7 @@ impl Store {
                             courses_after = entry.timetable.courses.len(),
                             "emploi du temps mis à jour"
                         );
-                        if let Some(notifier) = &self.notifier {
-                            let others = self.same_dates(&entry.timetable);
-                            let others: Vec<&Timetable> =
-                                others.iter().map(|other| &other.timetable).collect();
-                            notifier.week_changed(&previous.timetable, &entry.timetable, &others).await;
-                        }
+                        self.announce(Some(&previous.timetable), &entry.timetable, Some(&pdf)).await;
                         Revalidation::Updated
                     }
                     Err(error) => {

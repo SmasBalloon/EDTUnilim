@@ -19,7 +19,7 @@ RUN touch src/main.rs src/lib.rs && cargo build --release --locked
 # --- Exécution --------------------------------------------------------------
 FROM debian:trixie-slim AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get install -y --no-install-recommends ca-certificates curl poppler-utils \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --home /app edt \
     && mkdir -p /app/cache /app/state && chown -R edt:edt /app

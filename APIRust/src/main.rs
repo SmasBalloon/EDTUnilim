@@ -9,6 +9,7 @@ use tokio::signal;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
+use edt_unilim_api::channels::ChannelStore;
 use edt_unilim_api::config::Config;
 use edt_unilim_api::discord::Discord;
 use edt_unilim_api::homework::HomeworkStore;
@@ -43,6 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(discord_config) = &config.discord {
         let users = Arc::new(UserStore::open(&config.state_dir).await?);
         let homework = Arc::new(HomeworkStore::open(&config.state_dir).await?);
+        let channels = Arc::new(ChannelStore::open(&config.state_dir).await?);
         info!(
             subscribers = users.subscribers_all().await.len(),
             homework = homework.all().await.len(),
@@ -50,7 +52,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         let discord = Discord::new(discord_config.clone())?;
         let notifier = Notifier::new(discord.clone(), Arc::clone(&users))
-            .with_conflict_recipients(discord_config.conflict_recipients.clone());
+            .with_conflict_recipients(discord_config.conflict_recipients.clone())
+            .with_channels(channels);
         store = store.with_notifier(notifier.clone());
         tokio::spawn(reminder_loop(Arc::clone(&homework), Arc::clone(&users), notifier.clone()));
         // La seule connexion permanente du service : sans elle, le bot est là

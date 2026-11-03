@@ -1,5 +1,5 @@
-//! Client de l'API Discord : connexion OAuth2, ajout au serveur et messages
-//! privés envoyés par le bot.
+//! Client de l'API Discord : connexion OAuth2, ajout au serveur, messages
+//! privés et annonces dans les salons.
 
 use std::time::Duration;
 
@@ -98,6 +98,37 @@ fn action_row(buttons: &[Button]) -> Vec<serde_json::Value> {
 pub struct Attachment {
     pub filename: String,
     pub content: Vec<u8>,
+}
+
+impl Attachment {
+    /// Le type annoncé à Discord, d'après l'extension : c'est lui qui décide
+    /// si une image s'affiche dans le message ou reste un fichier à ouvrir.
+    fn mime(&self) -> &'static str {
+        match self.filename.rsplit('.').next().map(str::to_ascii_lowercase).as_deref() {
+            Some("png") => "image/png",
+            Some("pdf") => "application/pdf",
+            Some("ics") => "text/calendar; charset=utf-8",
+            _ => "application/octet-stream",
+        }
+    }
+}
+
+/// Qui une annonce dans un salon a le droit de notifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mention<'a> {
+    Nobody,
+    Everyone,
+    Role(&'a str),
+}
+
+impl Mention<'_> {
+    fn allowed(self) -> serde_json::Value {
+        match self {
+            Self::Nobody => json!({ "parse": [] }),
+            Self::Everyone => json!({ "parse": ["everyone"] }),
+            Self::Role(id) => json!({ "parse": [], "roles": [id] }),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -213,26 +244,50 @@ impl Discord {
 
         let url = format!("{}/channels/{}/messages", self.config.api_base, channel.id);
         // Pas de mention : un nom de groupe ou de salle ne doit notifier personne.
-        let mut payload = json!({ "content": content, "allowed_mentions": { "parse": [] } });
+        let mut payload = json!({ "content": content, "allowed_mentions": Mention::Nobody.allowed() });
         if !buttons.is_empty() {
             payload["components"] = json!([{ "type": 1, "components": action_row(&buttons) }]);
         }
+        self.post_message(&url, &payload, attachment.as_slice()).await
+    }
 
+    /// Écrit dans un salon d'un serveur, avec des fichiers joints : une image
+    /// s'affiche dans le message, un PDF reste à ouvrir d'un clic.
+    pub async fn send_to_channel(
+        &self,
+        channel_id: &str,
+        content: &str,
+        attachments: &[&Attachment],
+        mention: Mention<'_>,
+    ) -> Result<(), DiscordError> {
+        let url = format!("{}/channels/{channel_id}/messages", self.config.api_base);
+        let payload = json!({ "content": content, "allowed_mentions": mention.allowed() });
+        self.post_message(&url, &payload, attachments).await
+    }
+
+    /// Envoie un message, en multipart s'il porte des fichiers.
+    async fn post_message(
+        &self,
+        url: &str,
+        payload: &serde_json::Value,
+        attachments: &[&Attachment],
+    ) -> Result<(), DiscordError> {
         let mut attempt = 0;
         loop {
             // Un formulaire multipart ne se clone pas : il est reconstruit à chaque essai.
-            let request = match attachment {
-                Some(file) => {
+            let request = if attachments.is_empty() {
+                self.bot(self.client.post(url))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(payload.to_string())
+            } else {
+                let mut form = Form::new().text("payload_json", payload.to_string());
+                for (index, file) in attachments.iter().enumerate() {
                     let part = Part::bytes(file.content.clone())
                         .file_name(file.filename.clone())
-                        .mime_str("text/calendar; charset=utf-8")?;
-                    let form = Form::new().text("payload_json", payload.to_string()).part("files[0]", part);
-                    self.bot(self.client.post(&url)).multipart(form)
+                        .mime_str(file.mime())?;
+                    form = form.part(format!("files[{index}]"), part);
                 }
-                None => self
-                    .bot(self.client.post(&url))
-                    .header(CONTENT_TYPE, "application/json")
-                    .body(payload.to_string()),
+                self.bot(self.client.post(url)).multipart(form)
             };
             let response = request.send().await?;
             if response.status() == StatusCode::TOO_MANY_REQUESTS && attempt < RATE_LIMIT_RETRIES {
@@ -545,6 +600,36 @@ mod tests {
         let error = discord(&other, &[]).send_dm("42", "x", None).await.expect_err("panne");
         assert!(!error.is_dm_closed());
         assert!(error.to_string().contains("Internal Server Error"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn posts_in_a_channel_with_several_files_and_a_mention() {
+        use wiremock::matchers::body_string_contains;
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/channels/555/messages"))
+            .and(body_string_contains(r#""parse":["everyone"]"#))
+            .and(body_string_contains("files[1]"))
+            .and(body_string_contains("image/png"))
+            .and(body_string_contains("application/pdf"))
+            .respond_with(json_body("{}"))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let image = Attachment { filename: "A3_S8.png".into(), content: b"png".to_vec() };
+        let pdf = Attachment { filename: "A3_S8.pdf".into(), content: b"%PDF".to_vec() };
+        discord(&server, &[])
+            .send_to_channel("555", "@everyone", &[&image, &pdf], Mention::Everyone)
+            .await
+            .expect("annoncé");
+    }
+
+    #[test]
+    fn allows_only_the_requested_mentions() {
+        assert_eq!(Mention::Nobody.allowed(), json!({ "parse": [] }));
+        assert_eq!(Mention::Role("9").allowed(), json!({ "parse": [], "roles": ["9"] }));
+        let other = Attachment { filename: "x.bin".into(), content: Vec::new() };
+        assert_eq!(other.mime(), "application/octet-stream");
     }
 
     #[tokio::test]

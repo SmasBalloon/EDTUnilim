@@ -5,6 +5,7 @@
 //! télécharge, en extrait les créneaux ([`pdf`]) et les sert en JSON ([`http`]).
 
 pub mod catalog;
+pub mod channels;
 pub mod config;
 pub mod conflicts;
 pub mod discord;
