@@ -1,6 +1,7 @@
 import { render } from 'solid-js/web';
 
-import '@fontsource-variable/ibm-plex-sans';
+import '@fontsource-variable/bricolage-grotesque';
+import '@fontsource-variable/instrument-sans';
 import './app.css';
 import { App } from './App';
 import { watchTheme } from './lib/settings';

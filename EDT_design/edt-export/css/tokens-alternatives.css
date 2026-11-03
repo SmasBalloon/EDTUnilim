@@ -1,0 +1,34 @@
+/* ==========================================================================
+   Palettes des variantes (Proposition 2 et 3) — RÉFÉRENCE uniquement.
+   Les fichiers html/alternatives/*.html embarquent déjà ces valeurs dans leur
+   propre <style> ; ce fichier sert à les retrouver ou à les réutiliser.
+   ========================================================================== */
+
+/* Proposition 2 — thème clair chaud, navigation en haut */
+.p2 {
+  --bg: #F6F5F2;  --sf: #FFFFFF;  --ln: #E4E2DC;
+  --tx: #17181C;  --mu: #5E6270;  --ac: #D9303A;
+  /* types de cours : fond / texte */
+  --sae-bg: #E3F6EA;  --sae-tx: #11592F;
+  --cm-bg:  #FDF1D3;  --cm-tx:  #704800;
+  --td-bg:  #FDE6D8;  --td-tx:  #8A360A;
+  --tp-bg:  #E2ECFD;  --tp-tx:  #1A4594;
+  /* barres de répartition sous chaque jour */
+  --sae-bar: #9BDDB3;  --cm-bar: #F2CD6B;  --td-bar: #F4A97C;  --tp-bar: #93B6F2;
+  --seg-bg: #ECEAE4;  --gap-line: #CFCCC4;
+}
+
+/* Proposition 3 — style Apple (macOS / iOS) */
+.ap {
+  --bg: #F5F5F7;  /* iOS : #F2F2F7 */
+  --sf: #FFFFFF;  --hl: rgba(60, 60, 67, .14);
+  --tx: #1D1D1F;  --mu: #6E6E73;  --bl: #0071E3;
+  --sidebar: rgba(236, 236, 240, .8);
+  --sel-bg: rgba(0, 113, 227, .14);  --sel-tx: #0058B0;
+  --seg-bg: rgba(118, 118, 128, .12);
+  /* pastilles de type : point / texte */
+  --sae-dot: #34C759;  --sae-tx: #18803A;
+  --cm-dot:  #FFCC00;  --cm-tx:  #8F5100;
+  --td-dot:  #FF9500;  --td-tx:  #B93A08;
+  --tp-dot:  #007AFF;  --tp-tx:  #0058B0;
+}

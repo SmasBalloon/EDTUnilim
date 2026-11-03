@@ -1,9 +1,11 @@
 import { For, Show, createMemo, createResource, createSignal, type Component } from 'solid-js';
 import { CircleCheck, FileText, FileUp, Upload, X } from 'lucide-solid';
 
+
 import { ApiError, clearCache, fetchMe, fetchPdfs, pdfUrl, uploadPdf, type CachedPdf } from '../lib/api';
 import { shortDate } from '../lib/time';
-import { button, card, cx, input, link, note, notice, page, pill, press, sectionTitle, summary } from '../lib/ui';
+import { button, cx, link, notice, sectionTitle } from '../lib/ui';
+import { Empty, PageHead } from './Shell';
 
 const YEARS = [1, 2, 3];
 
@@ -26,11 +28,6 @@ function weekFromName(name: string): { year: number; week: number } | null {
 }
 
 const isPdf = (file: File) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-
-const removeButton = cx(
-  press,
-  'grid size-8 cursor-pointer place-items-center rounded-lg text-muted hover:bg-surface hover:text-text pointer-coarse:size-10',
-);
 
 const size = (bytes: number) => `${Math.max(1, Math.round(bytes / 1024))} Ko`;
 
@@ -105,20 +102,20 @@ export const PdfsPage: Component = () => {
 
   const statusLabel = (status: Status) =>
     status === 'sending' ? (
-      <span class="text-[0.8125rem] text-muted">Envoi…</span>
+      <span class="text-[13px] text-muted">Envoi…</span>
     ) : status === 'done' ? (
-      <CircleCheck size={16} class="text-accent-ink" aria-label="Enregistré" />
+      <CircleCheck size={18} class="text-ok" aria-label="Enregistré" />
     ) : typeof status === 'object' ? (
-      <span class="text-[0.8125rem] font-medium text-accent-ink">{status.error}</span>
+      <span class="text-[13px] font-medium text-accent-ink">{status.error}</span>
     ) : null;
 
   const fileRow = (item: Dropped, index: () => number) => (
-    <li class="flex min-w-0 flex-wrap items-center gap-1.5 rounded-control border border-line bg-elevated py-0.5 ps-2.5 pe-0.5">
-      <span class="min-w-0 max-w-44 truncate text-[0.8125rem]" title={item.file.name}>
+    <li class="ana-file flex-wrap py-1">
+      <span class="name" title={item.file.name}>
         {item.file.name}
       </span>
       <select
-        class={input({ invalid: item.year === null })}
+        aria-invalid={item.year === null}
         aria-label={`Année de ${item.file.name}`}
         value={item.year ?? ''}
         disabled={busy() || item.status === 'done'}
@@ -133,7 +130,8 @@ export const PdfsPage: Component = () => {
         max="255"
         inputmode="numeric"
         placeholder="Semaine"
-        class={cx(input({ invalid: item.week === null }), 'w-24')}
+        class="min-h-[34px] w-24 rounded-[9px] border border-line bg-surface px-2 text-[13px] font-semibold tabular-nums aria-invalid:border-accent"
+        aria-invalid={item.week === null}
         aria-label={`Semaine de ${item.file.name}`}
         value={item.week ?? ''}
         disabled={busy() || item.status === 'done'}
@@ -145,21 +143,21 @@ export const PdfsPage: Component = () => {
       {statusLabel(item.status)}
       <button
         type="button"
-        class={removeButton}
+        class="x"
         title="Retirer"
         aria-label={`Retirer ${item.file.name}`}
         disabled={busy()}
         onClick={() => remove(index())}
       >
-        <X size={15} aria-hidden="true" />
+        <X size={16} aria-hidden="true" />
       </button>
     </li>
   );
 
   const pdfRow = (year: number, pdf: CachedPdf) => (
-    <li class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-control bg-elevated px-3 py-2 text-[0.8125rem]">
-      <a class={cx(link, 'inline-flex items-center gap-1.5 font-semibold')} href={pdfUrl(year, pdf.week)} target="_blank" rel="noopener">
-        <FileText size={14} aria-hidden="true" />
+    <li class="card flex flex-wrap items-center gap-x-4 gap-y-1 px-[18px] py-3 text-sm">
+      <a class={cx(link, 'inline-flex items-center gap-2 font-semibold')} href={pdfUrl(year, pdf.week)} target="_blank" rel="noopener">
+        <FileText size={18} aria-hidden="true" />
         {`Semaine ${pdf.week}`}
       </a>
       <Show when={pdf.period}>
@@ -173,101 +171,103 @@ export const PdfsPage: Component = () => {
   );
 
   return (
-    <div class={page}>
-      <div class={summary}>
-        <div
-          class={cx(card, 'flex flex-wrap items-center gap-2 p-2 transition-colors', over() && 'border-accent bg-accent-wash')}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setOver(true);
-          }}
-          onDragLeave={(event) => {
-            // Passer d'un enfant à l'autre n'est pas quitter la carte.
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(false);
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            setOver(false);
-            if (me()?.admin) add(event.dataTransfer?.files ?? null);
-          }}
-        >
-          <button type="button" class={button.plain} disabled={!me()?.admin || busy()} onClick={() => picker?.click()}>
-            <FileUp size={16} aria-hidden="true" />
-            Choisir des PDF
-          </button>
-          <input
-            ref={picker}
-            type="file"
-            accept=".pdf,application/pdf"
-            multiple
-            class="hidden"
-            onChange={(event) => {
-              add(event.currentTarget.files);
-              event.currentTarget.value = '';
-            }}
-          />
+    <>
+      <PageHead title="PDF en cache" sub="Les emplois du temps gardés par le serveur, et ceux déposés à la main." />
 
-          <Show
-            when={files().length > 0}
-            fallback={<span class="text-[0.8125rem] text-muted">ou glisse-les ici — nommés A1_S12.pdf, ils se rangent seuls.</span>}
+      <Show when={!me.loading} fallback={<Empty>Chargement…</Empty>}>
+        <Show
+          when={me()?.admin}
+          fallback={
+            <Empty title="Accès réservé">
+              {me()
+                ? 'Cette page est réservée aux administrateurs.'
+                : 'Connecte-toi avec Discord, depuis la page Compte, pour accéder à cette page.'}
+            </Empty>
+          }
+        >
+          <div
+            class={cx('card ana-drop', over() && 'over')}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setOver(true);
+            }}
+            onDragLeave={(event) => {
+              // Passer d'un enfant à l'autre n'est pas quitter la carte.
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(false);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setOver(false);
+              add(event.dataTransfer?.files ?? null);
+            }}
           >
-            <ul class="order-last flex w-full min-w-0 flex-wrap gap-2">
-              <For each={files()}>{fileRow}</For>
-            </ul>
+            <FileUp size={36} strokeWidth={1.5} class="text-muted" aria-hidden="true" />
+            <h2>Dépose les nouvelles versions</h2>
+            <p>
+              Nommés A1_S12.pdf, ils se rangent seuls. Un PDF déposé remplace celui de sa semaine et sert aussitôt
+              l’emploi du temps ; dès que le serveur du département répond de nouveau, sa version reprend la main.
+            </p>
+            <div class="row mt-1.5">
+              <button type="button" class={button.plain} disabled={busy()} onClick={() => picker?.click()}>
+                Choisir des PDF
+              </button>
+            </div>
+            <input
+              ref={picker}
+              type="file"
+              accept=".pdf,application/pdf"
+              multiple
+              class="hidden"
+              onChange={(event) => {
+                add(event.currentTarget.files);
+                event.currentTarget.value = '';
+              }}
+            />
+          </div>
+
+          <Show when={files().length > 0}>
+            <div class="row justify-between">
+              <ul class="row min-w-0">
+                <For each={files()}>{fileRow}</For>
+              </ul>
+              <div class="row">
+                <Show when={blocker()}>{(reason) => <span class="text-sm text-muted">{reason()}</span>}</Show>
+                <button
+                  type="button"
+                  class={`${button.primary} min-h-12!`}
+                  disabled={blocker() !== null || busy()}
+                  onClick={() => void send()}
+                >
+                  <Upload size={20} aria-hidden="true" />
+                  {busy() ? 'Envoi…' : 'Enregistrer'}
+                </button>
+              </div>
+            </div>
           </Show>
 
-          <div class="ms-auto flex items-center gap-2">
-            <Show when={files().length > 0 && blocker()}>
-              {(reason) => <span class="text-[0.8125rem] text-muted">{reason()}</span>}
-            </Show>
-            <button type="button" class={button.primary} disabled={blocker() !== null || busy()} onClick={() => void send()}>
-              <Upload size={16} aria-hidden="true" />
-              {busy() ? 'Envoi…' : 'Enregistrer'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <main class="timetable">
-        <div class="mx-auto grid w-full max-w-176 gap-gap px-edge pb-6">
           <Show when={error()}>{(message) => <p class={notice(true)}>{message()}</p>}</Show>
 
-          <Show when={!me.loading} fallback={<p class={cx(note, 'text-center')}>Chargement…</p>}>
-            <Show
-              when={me()?.admin}
-              fallback={
-                <p class={cx(note, 'px-1 text-center')}>
-                  {me() ? 'Cette page est réservée aux administrateurs.' : 'Connecte-toi avec Discord, depuis la page Compte, pour accéder à cette page.'}
-                </p>
-              }
-            >
-              <p class={cx(note, 'px-1 text-center')}>
-                Un PDF déposé remplace celui de sa semaine et sert aussitôt l’emploi du temps. Dès que le serveur du
-                département répond de nouveau, sa version reprend la main.
-              </p>
-
-              <Show when={pdfs.error}>
-                {(failure) => <p class={notice(true)}>{`Liste indisponible : ${(failure() as Error).message}`}</p>}
-              </Show>
-
-              <For each={pdfs()}>
-                {(year) => (
-                  <section>
-                    <h2 class={sectionTitle}>
-                      {`BUT ${year.year}`} <span class={pill}>{year.pdfs.length}</span>
-                    </h2>
-                    <Show when={year.pdfs.length > 0} fallback={<p class={note}>Aucun PDF en cache.</p>}>
-                      <ul class="grid gap-1.5">
-                        <For each={year.pdfs}>{(pdf) => pdfRow(year.year, pdf)}</For>
-                      </ul>
-                    </Show>
-                  </section>
-                )}
-              </For>
-            </Show>
+          <Show when={pdfs.error}>
+            {(failure) => <p class={notice(true)}>{`Liste indisponible : ${(failure() as Error).message}`}</p>}
           </Show>
-        </div>
-      </main>
-    </div>
+
+          <For each={pdfs()}>
+            {(year) => (
+              <section class="flex flex-col gap-3.5">
+                <div class="row gap-2.5">
+                  <h2 class={sectionTitle}>{`BUT ${year.year}`}</h2>
+                  <span class={`tag y${year.year}`}>{year.pdfs.length}</span>
+                </div>
+                <Show when={year.pdfs.length > 0} fallback={<p class="text-sm text-muted">Aucun PDF en cache.</p>}>
+                  <ul class="flex flex-col gap-2">
+                    <For each={year.pdfs}>{(pdf) => pdfRow(year.year, pdf)}</For>
+                  </ul>
+                </Show>
+              </section>
+            )}
+          </For>
+        </Show>
+      </Show>
+    </>
   );
 };

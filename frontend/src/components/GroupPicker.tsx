@@ -1,7 +1,7 @@
 import { For, Show, createSignal, type Component } from 'solid-js';
 
 import { HALVES, baseOf, groupLabel, halfOf } from '../lib/groups';
-import { chip, fieldRow, label, note } from '../lib/ui';
+import { chip, chipSmall, fieldRow, label, note } from '../lib/ui';
 
 interface Props {
   /** Groupes principaux disponibles : `G1`, `G2`, … */
@@ -9,6 +9,13 @@ interface Props {
   /** Demi-groupe retenu, `G1a`, ou `null` si rien n'est encore choisi. */
   value: string | null;
   onSelect: (group: string) => void;
+  /**
+   * Les deux choix se posent dans la grille du parent (réglages : Année,
+   * Groupe, Sous-groupe sur une ligne) au lieu de s'empiler.
+   */
+  inline?: boolean;
+  /** Libellé du groupe principal : « Groupe principal » ou « Groupe ». */
+  baseLabel?: string;
 }
 
 /**
@@ -49,15 +56,15 @@ export const GroupPicker: Component<Props> = (props) => {
         </p>
       }
     >
-      <div class="grid gap-4">
-        <div class="grid gap-2">
-          <span class={label}>Groupe principal</span>
+      <div class={props.inline ? 'contents' : 'flex flex-col gap-7'}>
+        <div class="flex flex-col gap-3">
+          <span class={label}>{props.baseLabel ?? 'Groupe principal'}</span>
           <div class={fieldRow}>
             <For each={props.bases}>
               {(item) => (
                 <button
                   type="button"
-                  class={chip}
+                  class={props.inline ? chipSmall : chip}
                   aria-pressed={base() === item}
                   onClick={() => chooseBase(item)}
                 >
@@ -68,14 +75,14 @@ export const GroupPicker: Component<Props> = (props) => {
           </div>
         </div>
 
-        <div class="grid gap-2">
+        <div class="flex flex-col gap-3">
           <span class={label}>Sous-groupe</span>
           <div class={fieldRow}>
             <For each={HALVES}>
               {(item) => (
                 <button
                   type="button"
-                  class={chip}
+                  class={props.inline ? chipSmall : chip}
                   disabled={base() === null}
                   aria-pressed={half() === item}
                   onClick={() => chooseHalf(item)}

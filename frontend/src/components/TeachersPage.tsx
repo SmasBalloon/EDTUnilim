@@ -18,25 +18,10 @@ import {
 } from '../lib/api';
 import { groupLabel, weekDays } from '../lib/groups';
 import { settings, update } from '../lib/settings';
+import { KIND_LABEL } from '../lib/layout';
 import { humanDuration, periodLabel } from '../lib/time';
-import {
-  card,
-  centered,
-  chip,
-  field,
-  fieldLabel,
-  fieldRow,
-  fieldStack,
-  note,
-  option,
-  optionHint,
-  optionTitle,
-  page,
-  pick,
-  pickName,
-  pill,
-  summary,
-} from '../lib/ui';
+import { chip, fieldRow, kindTag, label, note, option } from '../lib/ui';
+import { Empty, Foot, PageHead } from './Shell';
 import { Sheet, SheetHeader } from './Sheet';
 import { WeekBar } from './WeekBar';
 import { WeekView } from './WeekView';
@@ -53,7 +38,7 @@ interface Props {
 function classOf(course: Course): string {
   const groups = course.groups.map(groupLabel).join(', ');
   const year = course.year === undefined ? '' : `BUT ${course.year}`;
-  return [year, groups, course.room].filter(Boolean).join(' · ');
+  return [year, groups].filter(Boolean).join(' · ');
 }
 
 /**
@@ -134,69 +119,71 @@ export const TeachersPage: Component<Props> = (props) => {
     return first ? periodLabel(first.week) : undefined;
   };
 
-  return (
-    <div class={page}>
-      <div class={summary}>
-        <div class={`${card} flex items-center gap-2 p-2`}>
-          {/* Le nom ne s'étire pas sur toute la carte : il garde la taille d'un bouton. */}
-          <button
-            type="button"
-            class={`${pick} min-w-48 flex-initial justify-between gap-3`}
-            onClick={() => setPicking(true)}
-            aria-label="Choisir un enseignant"
-          >
-            <span class={pickName}>{name() ?? 'Choisir un enseignant'}</span>
-            <ChevronDown size={16} aria-hidden="true" />
-          </button>
-          <Show when={chosen() && mine().length > 0}>
-            <span class={pill}>
-              {`${mine().length} cours · ${humanDuration(workload())}`}
-            </span>
-          </Show>
-        </div>
+  /** Les natures de cours de la semaine, pour la légende. */
+  const kinds = createMemo(() => [...new Set(mine().map((course) => course.kind))]);
 
+  return (
+    <>
+      <PageHead title="Enseignants" sub="La semaine d’un enseignant, les trois années réunies.">
         <WeekBar
           week={props.week}
           weeks={props.years[0]?.weeks ?? []}
           current={props.current}
           period={period()}
+          workload={chosen() ? workload() : undefined}
           onWeek={props.onWeek}
         />
+      </PageHead>
+
+      <div class="row justify-between">
+        <button
+          type="button"
+          class="field min-w-[min(320px,100%)] justify-between text-base font-semibold"
+          onClick={() => setPicking(true)}
+          aria-label="Choisir un enseignant"
+        >
+          <span class="truncate">{name() ?? 'Choisir un enseignant'}</span>
+          <ChevronDown size={22} aria-hidden="true" />
+        </button>
+        <Show when={chosen() && mine().length > 0}>
+          <div class="row gap-3 text-sm text-muted">
+            <span>{`${mine().length} cours`}</span>
+            <For each={kinds()}>{(kind) => <span class={kindTag(kind)}>{KIND_LABEL[kind]}</span>}</For>
+          </div>
+        </Show>
       </div>
 
-      <main class="timetable">
+      <Show
+        when={chosen() !== null}
+        fallback={<Empty title="Aucun enseignant choisi">Choisis un enseignant pour voir sa semaine, les trois années réunies.</Empty>}
+      >
         <Show
-          when={chosen() !== null}
+          when={mine().length > 0 ? week() : null}
           fallback={
-            <div class={centered}>
-              <p>Choisis un enseignant pour voir sa semaine, les trois années réunies.</p>
-            </div>
+            props.week === null || weeks.loading ? (
+              <Empty>Chargement de la semaine…</Empty>
+            ) : (
+              <Empty title="Semaine libre">{`Aucun cours cette semaine pour ${name() ?? 'cet enseignant'}.`}</Empty>
+            )
           }
         >
-          <Show
-            when={mine().length > 0 ? week() : null}
-            fallback={
-              <div class={centered}>
-                <p>
-                  {props.week === null || weeks.loading
-                    ? 'Chargement de la semaine…'
-                    : `Aucun cours cette semaine pour ${name() ?? 'cet enseignant'}`}
-                </p>
-              </div>
-            }
-          >
-            {(loaded) => (
-              <WeekView
-                week={loaded()}
-                days={weekDays(loaded())}
-                view={settings().view}
-                describe={classOf}
-                onSelect={props.onSelect}
-              />
-            )}
-          </Show>
+          {(loaded) => (
+            <WeekView
+              week={loaded()}
+              days={weekDays(loaded())}
+              view={settings().view}
+              describe={classOf}
+              onSelect={props.onSelect}
+            />
+          )}
         </Show>
-      </main>
+      </Show>
+
+      <Show when={chosen() && mine().length > 0}>
+        <Foot>
+          <span>{`${mine().length} cours · ${humanDuration(workload())} cette semaine`}</span>
+        </Foot>
+      </Show>
 
       <Picker
         open={picking()}
@@ -209,7 +196,7 @@ export const TeachersPage: Component<Props> = (props) => {
         }}
         onClose={() => setPicking(false)}
       />
-    </div>
+    </>
   );
 };
 
@@ -239,10 +226,10 @@ const Picker: Component<PickerProps> = (props) => {
       <SheetHeader title="Enseignants" onClose={props.onClose} />
 
       {/* Le champ de recherche tient la poignée de la feuille : il précède la liste. */}
-      <label class="mb-4 flex items-center gap-2 rounded-control border border-line bg-elevated px-2.5 text-muted">
-        <Search size={16} aria-hidden="true" />
+      <label class="field mb-6 flex text-muted">
+        <Search size={18} aria-hidden="true" />
         <input
-          class="min-h-[2.125rem] min-w-0 flex-1 py-1 text-sm text-text outline-none pointer-coarse:min-h-10"
+          class="flex-1 text-[15px]"
           type="search"
           placeholder="Chercher un nom"
           value={query()}
@@ -250,20 +237,20 @@ const Picker: Component<PickerProps> = (props) => {
         />
       </label>
 
-      <section class={field}>
-        <h3 class={fieldLabel}>Cette semaine</h3>
+      <section class="sec">
+        <h3 class={label}>Cette semaine</h3>
         <Show when={named().length > 0} fallback={<p class={note}>Personne à ce nom.</p>}>
-          <div class={fieldStack}>
+          <div class="grid gap-2">
             <For each={named()}>
               {(teacher) => (
                 <button
                   type="button"
-                  class={`${option} flex items-baseline justify-between gap-3`}
+                  class={`${option} flex-row! items-baseline justify-between gap-3`}
                   aria-pressed={props.chosen === teacher.id}
                   onClick={() => props.onChoose(teacher.id)}
                 >
-                  <span class={optionTitle}>{teacher.name}</span>
-                  <span class={optionHint}>{`${teacher.count} cours`}</span>
+                  <b>{teacher.name}</b>
+                  <span>{`${teacher.count} cours`}</span>
                 </button>
               )}
             </For>
@@ -274,8 +261,8 @@ const Picker: Component<PickerProps> = (props) => {
       {/* Ces écritures-là n'ont pas encore de nom au référentiel de l'API :
           les montrer, c'est dire ce qu'il reste à y ajouter. */}
       <Show when={unnamed().length > 0}>
-        <section class={field}>
-          <h3 class={fieldLabel}>Écritures sans nom</h3>
+        <section class="sec mt-7">
+          <h3 class={label}>Écritures sans nom</h3>
           <div class={fieldRow}>
             <For each={unnamed()}>
               {(teacher) => (

@@ -3,7 +3,7 @@ import { Show, createMemo, type Component } from 'solid-js';
 import type { Course } from '../lib/api';
 import { KIND_LABEL } from '../lib/layout';
 import { clock, isRunning, nowMinutes, relativeDayLabel, toMinutes, todayIso } from '../lib/time';
-import { card, cx } from '../lib/ui';
+import { cx } from '../lib/ui';
 
 interface State {
   /** Le cours en train de se dérouler, s'il y en a un. */
@@ -12,9 +12,7 @@ interface State {
   next: Course | null;
 }
 
-const Accent: Component<{ children: string }> = (props) => (
-  <span class="font-medium text-accent">{props.children}</span>
-);
+const Accent: Component<{ children: string }> = (props) => <span class="hl">{props.children}</span>;
 
 /** Quand a lieu le prochain cours : « à 14:00 », « demain à 08:00 ». */
 function when(course: Course, today: string): string {
@@ -57,41 +55,37 @@ export const StatusCard: Component<{ courses: Course[] }> = (props) => {
   });
 
   return (
-    <div class={`${card} px-3.5 py-2.5 text-sm`}>
-      <p class="flex items-center gap-2 font-medium">
-        <span
-          class={cx('size-2 shrink-0 rounded-full', state().running ? 'bg-accent' : 'bg-muted')}
-          aria-hidden="true"
-        />
+    <div class="card status">
+      <span class={cx('dot', state().running && 'live')} aria-hidden="true" />
+      <div class="min-w-0">
+        <p class="font-semibold">
+          <Show
+            when={state().running}
+            fallback={
+              <Show when={state().next?.date === todayIso(clock())} fallback={<span>Journée terminée</span>}>
+                <span>Pause</span>
+              </Show>
+            }
+          >
+            {(course) => (
+              <span>
+                En cours jusqu'à <Accent>{course().end}</Accent>
+              </span>
+            )}
+          </Show>
+        </p>
+
         <Show
-          when={state().running}
-          fallback={
-            <Show
-              when={state().next?.date === todayIso(clock())}
-              fallback={<span>Journée terminée</span>}
-            >
-              <span>Pause</span>
-            </Show>
-          }
+          when={state().next}
+          fallback={<p class="mt-0.5 text-sm text-muted">Plus rien cette semaine.</p>}
         >
           {(course) => (
-            <span>
-              En cours jusqu'à <Accent>{course().end}</Accent>
-            </span>
+            <p class="mt-0.5 text-sm text-muted">
+              Prochain <Accent>{when(course(), todayIso(clock()))}</Accent> · {summarise(course())}
+            </p>
           )}
         </Show>
-      </p>
-
-      <Show
-        when={state().next}
-        fallback={<p class="mt-1 text-[0.8125rem] text-muted">Plus rien cette semaine.</p>}
-      >
-        {(course) => (
-          <p class="mt-1 text-[0.8125rem] text-muted">
-            Prochain <Accent>{when(course(), todayIso(clock()))}</Accent> · {summarise(course())}
-          </p>
-        )}
-      </Show>
+      </div>
     </div>
   );
 };

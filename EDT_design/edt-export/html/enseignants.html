@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enseignants</title>
+<meta name="theme-color" content="#FF5252">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;600;700&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../css/tokens.css">
+<link rel="stylesheet" href="../css/components.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="app" style="width: 100%; min-height: 900px">
+<nav class="rail" aria-label="Navigation">
+<div class="logo">EDT</div>
+<a class="ni" href="semaine-grille.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>Semaine</a>
+<a class="ni" href="comparer.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M12 4v16"/></svg>Comparer</a>
+<a class="ni on" href="enseignants.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Enseignants</a>
+<a class="ni" href="salles.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4a1 1 0 011-1h9a1 1 0 011 1v17"/><path d="M3 21h18M12 12v.01"/></svg>Salles</a>
+<a class="ni" href="analyse.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Analyse</a>
+<a class="ni" href="devoirs.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6l2 2 3-3M4 14l2 2 3-3M13 7h7M13 15h7"/></svg>Devoirs</a>
+<div class="sp"></div>
+<a class="ni" href="compte.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>Compte</a>
+<a class="ni" href="reglages.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Réglages</a>
+</nav>
+<main class="main">
+<div class="top">
+<div><h1>Enseignants</h1><p class="sub">La semaine d'un enseignant, les trois années réunies.</p></div>
+<div class="wk"><b>Semaine 8</b><span>19 – 23 oct. · 24h</span><button class="btn" style="min-height: 40px">Aujourd'hui</button><button class="btn icon" aria-label="Semaine précédente"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button><button class="btn icon" aria-label="Semaine suivante"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div>
+</div>
+<div class="row" style="justify-content: space-between">
+<button class="field" style="min-width: 320px; justify-content: space-between; font-weight: 600; font-size: 16px"><span>Mérillou N.</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+<div class="row" style="gap: 12px; font-size: 14px; color: var(--mu)"><span>12 cours</span><span class="tag t-td">TD</span><span class="tag t-tp">TP</span></div>
+</div>
+<div class="card" style="padding: 24px 24px 20px 12px">
+<div style="display: grid; grid-template-columns: 56px repeat(5, minmax(0, 1fr))">
+<div></div>
+<div class="dh"><span>Lun</span><b>19 oct.</b></div><div class="dh"><span>Mar</span><b>20 oct.</b></div><div class="dh"><span>Mer</span><b>21 oct.</b></div><div class="dh"><span>Jeu</span><b>22 oct.</b></div><div class="dh"><span>Ven</span><b>23 oct.</b></div>
+<div class="hrs"><div>08:00</div><div>09:00</div><div>10:00</div><div>11:00</div><div>12:00</div><div>13:00</div><div>14:00</div><div>15:00</div><div>16:00</div><div>17:00</div><div>18:00</div><div>19:00</div></div>
+<div class="sched">
+<div class="blk k-tp" style="top: 2px; height: 108px"><div class="hd"><b>R1.05</b><span class="tag t-tp">TP</span></div><small class="m">08:00 – 10:00 · 112</small><small>BUT 1 · G1A</small></div>
+<div class="blk k-td" style="top: 114px; height: 108px"><div class="hd"><b>R1.05</b><span class="tag t-td">TD</span></div><small class="m">10:00 – 12:00 · 209</small><small>BUT 1 · G1</small></div>
+<div class="blk k-td" style="top: 478px; height: 108px"><div class="hd"><b>R1.05</b><span class="tag t-td">TD</span></div><small class="m">16:30 – 18:30 · 209</small><small>BUT 1 · G3</small></div>
+</div>
+<div class="sched">
+<div class="blk k-tp" style="top: 2px; height: 108px"><div class="hd"><b>R3.07</b><span class="tag t-tp">TP</span></div><small class="m">08:00 – 10:00 · 111</small><small>BUT 2 · G5A</small></div>
+<div class="blk k-tp" style="top: 310px; height: 108px"><div class="hd"><b>R1.05</b><span class="tag t-tp">TP</span></div><small class="m">13:30 – 15:30 · 104</small><small>BUT 1 · G3B</small></div>
+<div class="blk k-tp" style="top: 422px; height: 108px"><div class="hd"><b>R3.07</b><span class="tag t-tp">TP</span></div><small class="m">15:30 – 17:30 · 109</small><small>BUT 2 · G4A</small></div>
+</div>
+<div class="sched">
+<div class="blk k-tp" style="top: 2px; height: 108px"><div class="hd"><b>R1.05</b><span class="tag t-tp">TP</span></div><small class="m">08:00 – 10:00 · R50</small><small>BUT 1 · G1B</small></div>
+<div class="blk k-td" style="top: 114px; height: 108px"><div class="hd"><b>R1.05</b><span class="tag t-td">TD</span></div><small class="m">10:00 – 12:00 · 205</small><small>BUT 1 · G2</small></div>
+<div class="blk k-tp" style="top: 422px; height: 108px"><div class="hd"><b>R1.05</b><span class="tag t-tp">TP</span></div><small class="m">15:30 – 17:30 · 108</small><small>BUT 1 · G3A</small></div>
+</div>
+<div class="sched">
+<div class="blk k-tp" style="top: 2px; height: 108px"><div class="hd"><b>R1.05</b><span class="tag t-tp">TP</span></div><small class="m">08:00 – 10:00 · 111</small><small>BUT 1 · G2A</small></div>
+<div class="blk k-tp" style="top: 114px; height: 108px"><div class="hd"><b>R1.05</b><span class="tag t-tp">TP</span></div><small class="m">10:00 – 12:00 · R50</small><small>BUT 1 · G2B</small></div>
+<div class="blk k-tp" style="top: 310px; height: 108px"><div class="hd"><b>R3.07</b><span class="tag t-tp">TP</span></div><small class="m">13:30 – 15:30 · 112</small><small>BUT 2 · G4B</small></div>
+</div>
+<div class="sched"></div>
+</div>
+</div>
+<div class="foot"><span>12 cours · 24 h cette semaine</span><span></span></div>
+</main>
+</div>
+</body>
+</html>
