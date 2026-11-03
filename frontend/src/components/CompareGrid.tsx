@@ -67,7 +67,7 @@ function sharedGaps(left: Course[], right: Course[]): [number, number][] {
  * Deux emplois du temps d'un même jour, colonne contre colonne, sur la même
  * échelle horaire. Ce que la page doit donner d'un coup d'œil : ce qu'on suit
  * ensemble (contour rouge, `cmp-both`) et quand on est libres tous les deux
- * (bande verte qui traverse les deux colonnes, `cmp-free`).
+ * (bande cyan qui traverse les deux colonnes, `cmp-free`).
  */
 export const CompareGrid: Component<Props> = (props) => {
   const today = createMemo(() => todayIso(clock()));
