@@ -221,7 +221,7 @@ export const ComparePage: Component<Props> = (props) => {
             </Show>
             <div class="row gap-3.5 text-[13px] text-muted">
               <span class="tag t-room cmp-both">ensemble</span>
-              <span class="tag t-sae">libres tous les deux</span>
+              <span class="tag t-free">libres tous les deux</span>
             </div>
           </div>
 

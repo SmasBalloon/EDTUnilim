@@ -29,6 +29,12 @@
   --edt-ok-soft:   rgba(74, 222, 128, .13);
   --edt-ok-line:   rgba(74, 222, 128, .35);
 
+  /* « libres tous les deux » (vue Comparer) : cyan, teinte qu'aucun type de
+     cours n'utilise, pour ne pas se confondre avec le vert des SAÉ. */
+  --edt-free:      #5EE6F0;
+  --edt-free-soft: rgba(34, 211, 238, .12);
+  --edt-free-line: rgba(34, 211, 238, .45);
+
   /* ---- Types de cours --------------------------------------------------
      text = couleur du libellé (tag)   bg = fond de la carte
      line = bordure de la carte        tag = fond du tag                    */
@@ -71,6 +77,7 @@
   --edt-text: #17181C;  --edt-muted: #5E6270;
   --edt-accent: #D9303A;  --edt-on-accent: #FFFFFF;  --edt-accent-text: #B3202B;  --edt-accent-hot: #C42632;
   --edt-ok: #11592F;
+  --edt-free: #0B5866;
   --edt-sae-text: #11592F;  --edt-cm-text: #704800;  --edt-td-text: #8A360A;  --edt-tp-text: #1A4594;
   --edt-y1-text: #1A4594;   --edt-y2-text: #704800;  --edt-y3-text: #5A2A96;
   --edt-scrim: rgba(23, 24, 28, .45);
