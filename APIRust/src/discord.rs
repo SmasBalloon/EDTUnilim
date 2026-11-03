@@ -265,6 +265,19 @@ impl Discord {
         self.post_message(&url, &payload, attachments).await
     }
 
+    /// Complète une réponse différée à une commande : elle remplace le
+    /// « réfléchit… » affiché en attendant. Le jeton de l'interaction suffit,
+    /// il reste valable quinze minutes.
+    pub async fn edit_original_response(&self, token: &str, content: &str) -> Result<(), DiscordError> {
+        let url =
+            format!("{}/webhooks/{}/{token}/messages/@original", self.config.api_base, self.config.client_id);
+        let request =
+            self.client.patch(url).header(CONTENT_TYPE, "application/json").body(
+                json!({ "content": content, "allowed_mentions": Mention::Nobody.allowed() }).to_string(),
+            );
+        self.send(request).await.map(drop)
+    }
+
     /// Envoie un message, en multipart s'il porte des fichiers.
     async fn post_message(
         &self,
@@ -622,6 +635,18 @@ mod tests {
             .send_to_channel("555", "@everyone", &[&image, &pdf], Mention::Everyone)
             .await
             .expect("annoncé");
+    }
+
+    #[tokio::test]
+    async fn completes_a_deferred_reply() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/webhooks/1/jeton-interaction/messages/@original"))
+            .respond_with(json_body("{}"))
+            .expect(1)
+            .mount(&server)
+            .await;
+        discord(&server, &[]).edit_original_response("jeton-interaction", "Fait").await.expect("complétée");
     }
 
     #[test]

@@ -22,7 +22,7 @@ use serde_json::{json, Value};
 use time::{Date, Duration, OffsetDateTime};
 use tracing::{info, warn};
 
-use crate::channels::ChannelSubscription;
+use crate::channels::{ChannelStore, ChannelSubscription};
 use crate::config::YEARS;
 use crate::discord::{DiscordError, Mention};
 use crate::error::ApiError;
@@ -31,7 +31,7 @@ use crate::notify::describe_homework;
 use crate::users::User;
 
 use super::homework::set_done;
-use super::AppState;
+use super::{Account, AppState};
 
 /// Réponse visible de la seule personne qui a lancé la commande.
 const EPHEMERAL: u64 = 64;
@@ -42,9 +42,6 @@ const BUTTONS: usize = 5;
 /// « Gérer le serveur » : la permission demandée pour choisir le salon des annonces.
 const MANAGE_GUILD: u64 = 1 << 5;
 const ADMINISTRATOR: u64 = 1 << 3;
-/// Le message d'essai dans le salon doit laisser le temps de répondre à
-/// Discord, qui n'attend la réponse à une commande que trois secondes.
-const CHANNEL_CHECK: std::time::Duration = std::time::Duration::from_millis(2200);
 
 /// Ce que Discord envoie. On n'y lit que ce dont on se sert.
 #[derive(Debug, Deserialize)]
@@ -61,6 +58,9 @@ struct Interaction {
     /// Le serveur où la commande a été lancée ; absent en message privé.
     #[serde(default)]
     guild_id: Option<String>,
+    /// Jeton de l'interaction : il permet de compléter une réponse différée.
+    #[serde(default)]
+    token: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -452,46 +452,20 @@ async fn channel_command(state: &Arc<AppState>, interaction: &Interaction, data:
                 created_at: OffsetDateTime::now_utc(),
             };
 
-            // Un message d'essai : mieux vaut découvrir maintenant qu'il manque
-            // une permission qu'à la prochaine mise à jour de l'emploi du temps.
-            let hello = format!(
-                "✅ Ce salon recevra les emplois du temps de **BUT {year}** : l'image et le PDF de chaque nouvelle semaine, puis à chaque mise à jour, avec la liste des changements."
-            );
-            let check =
-                account.discord.send_to_channel(&subscription.channel_id, &hello, &[], Mention::Nobody);
-            match tokio::time::timeout(CHANNEL_CHECK, check).await {
-                Ok(Ok(())) | Err(_) => {}
-                Ok(Err(DiscordError::Refused { .. })) => {
-                    return reply(&format!(
-                        "Je ne peux pas écrire dans <#{}>. Donne-moi les permissions *Voir le salon*, *Envoyer des messages* et *Joindre des fichiers*{}.",
-                        subscription.channel_id,
-                        if subscription.mention.is_some() { ", et *Mentionner @everyone* pour la mention" } else { "" },
-                    ));
+            let Some(token) = interaction.token.clone() else {
+                return reply("Interaction incomplète, réessaie.");
+            };
+            // Écrire dans le salon et enregistrer peut dépasser les trois
+            // secondes que Discord accorde : on répond « en cours » tout de
+            // suite, et la réponse est complétée quand c'est fait.
+            let (account, channels) = (Arc::clone(account), Arc::clone(channels));
+            tokio::spawn(async move {
+                let text = add_channel(&account, &channels, subscription).await;
+                if let Err(error) = account.discord.edit_original_response(&token, &text).await {
+                    warn!(%error, "réponse à /salon ajouter impossible");
                 }
-                Ok(Err(error)) => {
-                    warn!(%error, "salon d'annonces injoignable");
-                    return reply("Discord ne répond pas, réessaie dans un instant.");
-                }
-            }
-
-            let summary = format!(
-                "📣 <#{}> annoncera les emplois du temps de BUT {year}{}.",
-                subscription.channel_id,
-                subscription
-                    .mention_text()
-                    .map(|mention| format!(", en mentionnant {mention}"))
-                    .unwrap_or_default(),
-            );
-            match channels.set(subscription).await {
-                Ok(()) => {
-                    info!(guild = guild_id, year, "salon d'annonces ajouté");
-                    reply(&summary)
-                }
-                Err(error) => {
-                    warn!(%error, "salon d'annonces non enregistré");
-                    reply("Je n'ai pas réussi à l'enregistrer. Réessaie dans un instant.")
-                }
-            }
+            });
+            deferred()
         }
         "retirer" => {
             let Some(channel_id) = channel else { return reply("Il faut un salon.") };
@@ -532,6 +506,52 @@ async fn channel_command(state: &Arc<AppState>, interaction: &Interaction, data:
         other => {
             warn!(command = other, "sous-commande de salon inconnue");
             reply("Cette commande n'existe pas.")
+        }
+    }
+}
+
+/// Essaie d'écrire dans le salon, puis l'abonne ; renvoie la réponse à afficher.
+async fn add_channel(
+    account: &Account,
+    channels: &ChannelStore,
+    subscription: ChannelSubscription,
+) -> String {
+    let year = subscription.year;
+    // Un message d'essai : mieux vaut découvrir maintenant qu'il manque une
+    // permission qu'à la prochaine mise à jour de l'emploi du temps.
+    let hello = format!(
+        "✅ Ce salon recevra les emplois du temps de **BUT {year}** : l'image et le PDF de chaque nouvelle semaine, puis à chaque mise à jour, avec la liste des changements."
+    );
+    match account.discord.send_to_channel(&subscription.channel_id, &hello, &[], Mention::Nobody).await {
+        Ok(()) => {}
+        Err(DiscordError::Refused { status, message, .. }) => {
+            warn!(%status, message, channel = subscription.channel_id, "salon d'annonces refusé");
+            return format!(
+                "Je ne peux pas écrire dans <#{}> ({message}). Donne-moi les permissions *Voir le salon*, *Envoyer des messages* et *Joindre des fichiers*{}.",
+                subscription.channel_id,
+                if subscription.mention.is_some() { ", et *Mentionner @everyone* pour la mention" } else { "" },
+            );
+        }
+        Err(error) => {
+            warn!(%error, "salon d'annonces injoignable");
+            return "Discord ne répond pas, réessaie dans un instant.".to_owned();
+        }
+    }
+
+    let summary = format!(
+        "📣 <#{}> annoncera les emplois du temps de BUT {year}{}.",
+        subscription.channel_id,
+        subscription.mention_text().map(|mention| format!(", en mentionnant {mention}")).unwrap_or_default(),
+    );
+    let guild = subscription.guild_id.clone();
+    match channels.set(subscription).await {
+        Ok(()) => {
+            info!(guild, year, "salon d'annonces ajouté");
+            summary
+        }
+        Err(error) => {
+            warn!(%error, "salon d'annonces non enregistré");
+            "Je n'ai pas réussi à l'enregistrer. Réessaie dans un instant.".to_owned()
         }
     }
 }
@@ -664,6 +684,12 @@ fn trim_label(summary: &str) -> String {
         Some((cut, _)) => format!("{}…", &label[..cut]),
         None => label,
     }
+}
+
+/// « L'application réfléchit… », visible de la seule personne : la vraie
+/// réponse remplace ce message ensuite.
+fn deferred() -> Value {
+    json!({ "type": 5, "data": { "flags": EPHEMERAL } })
 }
 
 fn reply(text: &str) -> Value {
