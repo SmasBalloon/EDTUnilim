@@ -3,172 +3,176 @@
 /* ==========================================================================
    Feuille de style de l'application.
 
-   Presque tout se dit en classes Tailwind, dans le JSX ; les classes des
-   éléments répétés (boutons, puces, cartes…) sont rassemblées dans
-   `lib/ui.ts`. Ne reste ici que ce que les utilitaires ne savent pas dire :
+   Les couleurs, polices et composants viennent de la refonte (Proposition 1) :
 
-   1. Jetons          couleurs, rayons, ombres, espacements, courbes
-   2. Thèmes          clair et sombre, un simple jeu de jetons réécrits
-   3. Base            éléments HTML, focus, défilement, préférences d'accès
-   4. Utilitaires     mélanges et dégradés calculés sur des variables
+   - `styles/tokens.css`      TOUTES les couleurs et polices, thèmes compris
+   - `styles/components.css`  les composants partagés (.rail, .btn, .tag, .blk…)
+   - `styles/screens.css`     les styles propres à un écran, préfixés par écran
+
+   Ici ne restent que le pont vers Tailwind (les jetons `--color-*` relisent
+   les `--edt-*`), les états que les maquettes ne montrent pas (survol, appui,
+   focus, désactivé), le responsive et quelques utilitaires calculés.
    ========================================================================== */
 
-/* Le thème est posé en classe sur <html> par le réglage d'apparence. */
-@custom-variant dark (&:where(.dark, .dark *));
+@import "./styles/tokens.css";
+@import "./styles/components.css" layer(components);
+@import "./styles/screens.css" layer(components);
+
+/* Le thème est posé sur <html> par le réglage d'apparence : `data-theme`. */
+@custom-variant dark (&:where(:root:not([data-theme="light"]) *));
 
 /* Translucidité refusée : les matières redeviennent pleines. */
 @custom-variant reduce-transparency (@media (prefers-reduced-transparency: reduce));
 
 /* --------------------------------------------------------------------------
-   1. Jetons
+   1. Jetons Tailwind — aucune valeur ici, seulement des renvois à tokens.css
    -------------------------------------------------------------------------- */
 
-/* `static` : tous les jetons sont émis, même ceux que seul un `var()` lit
-   (les couleurs de nature, relues par les classes `kind-*`). */
 @theme static {
-  /*
-   * IBM Plex Sans : dessinée pour la documentation technique, avec des chiffres
-   * tabulaires nets — un emploi du temps est d'abord une grille de nombres.
-   * Empaquetée avec l'application, donc lisible hors ligne et sans requête
-   * vers un tiers.
-   */
-  --font-sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--edt-font-body);
+  --font-display: var(--edt-font-display);
+  --font-mono: var(--edt-font-mono);
 
-  /* Surfaces, du fond de page à l'élément posé dessus. */
-  --color-bg: #f6f7f9;
-  --color-surface: #ffffff;
-  --color-elevated: #edeff3;
-  --color-line: #e1e4ea;
+  --color-bg: var(--edt-bg);
+  --color-surface: var(--edt-surface-1);
+  --color-elevated: var(--edt-surface-2);
+  --color-raised: var(--edt-surface-3);
+  --color-line: var(--edt-line);
 
-  /* Bord éclairé des matières (bandeau, feuilles, cartes en sombre). */
-  --color-edge: rgb(255 255 255 / 0.5);
+  --color-text: var(--edt-text);
+  --color-muted: var(--edt-muted);
 
-  /* Texte. */
-  --color-text: #14171c;
-  --color-muted: #5e6675;
+  --color-accent: var(--edt-accent);
+  --color-on-accent: var(--edt-on-accent);
+  --color-accent-ink: var(--edt-accent-text);
+  --color-accent-hot: var(--edt-accent-hot);
+  --color-accent-soft: var(--edt-accent-soft);
+  --color-accent-wash: color-mix(in srgb, var(--edt-accent) 8%, transparent);
+  --color-accent-line: color-mix(in srgb, var(--edt-accent) 40%, transparent);
+  --color-accent-deep: color-mix(in oklab, var(--edt-accent) 86%, black);
 
-  /* Accent unique de l'application. */
-  --color-accent: #e5303a;
-  --color-on-accent: #ffffff;
+  --color-ok: var(--edt-ok);
+  --color-ok-soft: var(--edt-ok-soft);
+  --color-ok-line: var(--edt-ok-line);
 
-  /* L'accent mêlé au reste, calculé sur <html> : il suit le thème et la
-     couleur choisie dans les réglages. */
-  --color-accent-ink: color-mix(in oklab, var(--color-accent) 75%, var(--color-text));
-  --color-accent-soft: color-mix(in oklab, var(--color-accent) 16%, var(--color-surface));
-  --color-accent-wash: color-mix(in oklab, var(--color-accent) 10%, var(--color-surface));
-  --color-accent-line: color-mix(in oklab, var(--color-accent) 45%, var(--color-line));
-  --color-accent-deep: color-mix(in oklab, var(--color-accent) 88%, black);
-
-  /*
-   * Nature d'un cours, d'après les couleurs du PDF du département : jaune pour
-   * les CM, orange pour les TD, bleu pour les TP, vert pour les SAÉ. Le reste
-   * (contrôles) demeure neutre, sa pastille le nomme.
-   */
-  --color-kind-cm: #b8860b;
-  --color-kind-td: #d1670f;
-  --color-kind-tp: #2563c9;
-  --color-kind-sae: #14804a;
-  --color-kind-other: #6b7280;
+  /* Texte de chaque nature de cours. */
+  --color-kind-cm: var(--edt-cm-text);
+  --color-kind-td: var(--edt-td-text);
+  --color-kind-tp: var(--edt-tp-text);
+  --color-kind-sae: var(--edt-sae-text);
+  --color-kind-other: var(--edt-muted);
 
   /* La nature du cours qu'on regarde, posée par les classes `kind-*` ; à
      défaut, l'accent (pastille d'un devoir, par exemple). */
-  --color-kind: var(--color-accent);
+  --color-kind: var(--edt-accent);
 
-  /* Une taille de plus que Tailwind, pour les mentions de la grille. */
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1.4;
 
-  --radius-card: 1.125rem;
-  --radius-control: 0.75rem;
-  --radius-sheet: 1.5rem;
+  --radius-card: 18px;
+  --radius-control: 12px;
+  --radius-sheet: 18px;
 
-  /* Marge latérale et interstice, qui suivent la largeur de l'écran :
-     `px-edge`, `gap-gap`… */
-  --spacing-edge: clamp(0.75rem, 2.5vw, 1.25rem);
-  --spacing-gap: clamp(0.625rem, 2vw, 0.875rem);
-  /* Hauteur dont les cartes de tête chevauchent le bandeau. */
-  --spacing-overlap: clamp(1.75rem, 5vw, 2.75rem);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 12px 28px -20px rgb(0 0 0 / 0.5);
+  --shadow-pop: 0 2px 6px rgb(0 0 0 / 0.08), 0 32px 64px -24px rgb(0 0 0 / 0.55);
 
-  /*
-   * Les ombres se font à deux étages : un contact serré qui pose l'objet sur
-   * le fond, une diffusion large qui dit à quelle hauteur il flotte. Plus une
-   * surface est grande, plus elle est épaisse et plus son ombre porte loin.
-   */
-  --shadow-card:
-    0 1px 2px rgb(0 0 0 / 0.04),
-    0 12px 28px -20px rgb(0 0 0 / 0.5);
-  --shadow-pop:
-    0 2px 6px rgb(0 0 0 / 0.06),
-    0 32px 64px -24px rgb(0 0 0 / 0.45);
-
-  /*
-   * Courbes d'accompagnement. Tout ce qui se saisit est mené par un ressort en
-   * JavaScript — voir `lib/motion.ts` — car une transition CSS ne se rattrape
-   * pas en pleine course. Restent ici les changements d'état : ce qui répond
-   * au doigt part vite et s'arrête doucement.
-   */
   --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 :root {
-  /* Une réaction au-delà d'un dixième de seconde ne se lit plus comme la nôtre. */
   --press: 0.1s;
-  --settle: 0.22s;
-
-  /* Flou des matières translucides. */
-  --material-blur: 24px;
-
-  /* Dosages des mélanges appliqués aux couleurs de nature. */
-  --kind-fill: 10%;
-  --kind-edge: 62%;
-  --kind-ink: 78%;
-
-  color-scheme: light;
-}
-
-.kind-amphi { --color-kind: var(--color-kind-cm); }
-.kind-td { --color-kind: var(--color-kind-td); }
-.kind-tp { --color-kind: var(--color-kind-tp); }
-.kind-sae { --color-kind: var(--color-kind-sae); }
-.kind-controle { --color-kind: var(--color-kind-other); }
-
-/* --------------------------------------------------------------------------
-   2. Thèmes
-   -------------------------------------------------------------------------- */
-
-.dark {
-  --color-bg: #0e1013;
-  --color-surface: #16191e;
-  --color-elevated: #1e222a;
-  --color-line: #272c35;
-  --color-edge: rgb(255 255 255 / 0.08);
-
-  --color-text: #eceff3;
-  --color-muted: #8a93a2;
-
-  --color-accent: #ff4b4b;
-  --color-on-accent: #ffffff;
-
-  --color-kind-cm: #ffd75e;
-  --color-kind-td: #ff9f52;
-  --color-kind-tp: #6fb0ff;
-  --color-kind-sae: #5fd08a;
-  --color-kind-other: #9aa1ac;
-
-  --kind-fill: 14%;
-  --kind-edge: 76%;
-  --kind-ink: 88%;
-
+  --settle: 0.2s;
+  /* Hauteur de la barre d'onglets du bas, sur téléphone. */
+  --tabbar-height: 0px;
   color-scheme: dark;
 }
 
-/* Contraste renforcé : des bords nets plutôt que des nuances. */
-@media (prefers-contrast: more) {
-  :root {
-    --color-line: color-mix(in oklab, var(--color-text) 35%, transparent);
-    --color-muted: color-mix(in oklab, var(--color-text) 80%, transparent);
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/*
+ * La nature d'un cours, en variables : texte, fond, bordure, fond de tag. Les
+ * classes `k-*` / `t-*` de components.css les écrivent en dur pour quatre
+ * natures ; celles-ci servent partout où la nature est lue par `var()`.
+ */
+.kind-amphi { --color-kind: var(--edt-cm-text); --kind-bg: var(--edt-cm-bg); --kind-line: var(--edt-cm-line); --kind-tag: var(--edt-cm-tag); }
+.kind-td { --color-kind: var(--edt-td-text); --kind-bg: var(--edt-td-bg); --kind-line: var(--edt-td-line); --kind-tag: var(--edt-td-tag); }
+.kind-tp { --color-kind: var(--edt-tp-text); --kind-bg: var(--edt-tp-bg); --kind-line: var(--edt-tp-line); --kind-tag: var(--edt-tp-tag); }
+.kind-sae { --color-kind: var(--edt-sae-text); --kind-bg: var(--edt-sae-bg); --kind-line: var(--edt-sae-line); --kind-tag: var(--edt-sae-tag); }
+.kind-controle { --color-kind: var(--edt-muted); --kind-bg: var(--edt-surface-2); --kind-line: var(--edt-line); --kind-tag: var(--edt-surface-3); }
+
+/* --------------------------------------------------------------------------
+   2. Compléments aux composants de la maquette
+   -------------------------------------------------------------------------- */
+
+@layer components {
+  /* Les contrôles d'examen (absents de la maquette) restent neutres : leur
+     libellé « Contrôle » suffit à les nommer. */
+  .k-ctl { background: var(--edt-surface-2) !important; border-color: var(--edt-line) !important; }
+  .t-ctl { background: var(--edt-surface-3); color: var(--edt-text); }
+  /* Tag dans la couleur du cours qui le porte (classe `kind-*` d'un parent). */
+  .t-kind { background: var(--kind-tag, var(--edt-accent-soft)); color: var(--color-kind); }
+
+  /* La coquille : le menu reste à l'écran pendant que la page défile. */
+  .app { min-height: 100dvh; }
+  .rail { position: sticky; top: 0; height: 100dvh; overflow-y: auto; scrollbar-width: none; }
+  .ni { border: 0; background: transparent; font-family: inherit; cursor: pointer; transition: color var(--settle) var(--ease-out), background-color var(--settle) var(--ease-out); }
+  .ni.on:hover { color: var(--edt-text); }
+  .ni-more { display: none; }
+  .logo { text-decoration: none; }
+  .main { min-height: 100dvh; }
+
+  /* Les états que la maquette ne dessine pas. Le retour se donne à l'appui. */
+  .btn, .opt, .seg button {
+    transition: background-color var(--settle) var(--ease-out), border-color var(--settle) var(--ease-out),
+      color var(--settle) var(--ease-out), scale var(--settle) var(--ease-out);
   }
+  .btn:active:not(:disabled), .opt:active:not(:disabled), .seg button:active:not(:disabled) {
+    scale: 0.97;
+    transition-duration: var(--press);
+  }
+  .btn:hover:not(:disabled) { background: var(--edt-surface-3); }
+  .btn.pri:hover:not(:disabled) { background: color-mix(in oklab, var(--edt-accent) 86%, black); border-color: transparent; }
+  .btn.discord:hover:not(:disabled) { background: color-mix(in oklab, var(--edt-discord) 86%, black); }
+  .btn:disabled, .opt:disabled, .seg button:disabled { opacity: 0.4; cursor: default; }
+  .btn.sm { min-height: 36px; padding: 0 12px; font-size: 13px; }
+  .btn.icon.sm { width: 36px; padding: 0; }
+  .btn.wide { width: 100%; justify-content: center; }
+
+  .opt:hover:not(:disabled) { border-color: var(--edt-muted); }
+  .opt[aria-pressed="true"] { border-color: var(--edt-accent); background: var(--edt-accent-soft); color: var(--edt-accent-text); }
+  .opt.sm { min-width: 0; padding: 0 14px; }
+
+  .seg button { white-space: nowrap; }
+  .seg button:hover:not(:disabled) { color: var(--edt-text); }
+  .seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--edt-surface-3); color: var(--edt-text); }
+  .seg.fill { display: flex; }
+  .seg.fill button { flex: 1; justify-content: center; padding: 0 8px; }
+
+  /* Le champ de la maquette, appliqué à un vrai <input> / <select>. */
+  .input {
+    min-height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--edt-line);
+    background: var(--edt-surface-1); color: var(--edt-text); font: 500 14px var(--edt-font-body);
+    font-variant-numeric: tabular-nums;
+  }
+  .input:focus-visible { border-color: var(--edt-accent); }
+  .input[aria-invalid="true"] { border-color: var(--edt-accent); }
+  textarea.input { padding: 12px 14px; min-height: 92px; font-weight: 400; font-size: 15px; resize: vertical; }
+  .field { cursor: default; }
+  .field input { min-width: 0; background: none; border: 0; color: var(--edt-text); font: inherit; font-variant-numeric: tabular-nums; outline: none; }
+  .field[aria-invalid="true"] { border-color: var(--edt-accent); }
+  button.field { cursor: pointer; }
+  button.field:hover { border-color: var(--edt-muted); }
+
+  .blk { text-align: start; color: var(--edt-text); font: inherit; cursor: pointer; transition: scale var(--settle) var(--ease-out); }
+  .blk:active { scale: 0.98; transition-duration: var(--press); }
+  .blk small { overflow: hidden; text-overflow: ellipsis; }
+
+  .empty p { max-width: 460px; line-height: 1.5; }
+  .notice { padding: 12px 16px; border-radius: 12px; border: 1px solid var(--edt-line); background: var(--edt-surface-1); font-size: 14px; line-height: 1.5; }
+  .notice.err { border-color: color-mix(in srgb, var(--edt-accent) 45%, transparent); background: var(--edt-accent-soft); }
 }
 
 /* --------------------------------------------------------------------------
@@ -176,48 +180,26 @@
    -------------------------------------------------------------------------- */
 
 @layer base {
-  html,
-  body {
-    height: 100%;
-    /*
-     * Le geste latéral appartient à l'application : sans cela, le navigateur
-     * l'interprète comme un retour en arrière et quitte la page.
-     */
-    overscroll-behavior: none;
-  }
+  html { background: var(--edt-bg); }
 
   body {
-    background: var(--color-bg);
-    color: var(--color-text);
-    font-optical-sizing: auto;
-    /* L'interlignage est ample sur le texte courant, serré sur les titres :
-       l'un se lit ligne à ligne, l'autre d'un seul regard. */
+    background: var(--edt-bg);
+    color: var(--edt-text);
+    font-family: var(--edt-font-body);
     line-height: 1.5;
     text-rendering: optimizeLegibility;
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* Les grandes lettres se serrent, les petites s'aèrent : les titres
-     prennent l'approche négative, les étiquettes la leur en utilitaire. */
-  h1,
-  h2 {
-    letter-spacing: -0.02em;
-    line-height: 1.15;
-  }
-
+  /* Accessibilité (INTEGRATION.md § 8) : le focus clavier se voit partout. */
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--edt-accent);
     outline-offset: 2px;
-    border-radius: var(--radius-control);
   }
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-line) transparent;
-  }
-
-  textarea {
-    resize: vertical;
+    scrollbar-color: var(--edt-line) transparent;
   }
 }
 
@@ -229,88 +211,69 @@
     transition-duration: 0.01ms !important;
   }
 
-  /* Moins de mouvement ne veut pas dire moins de retour : l'appui se voit
-     encore, par la couleur plutôt que par le déplacement. */
   *:active {
     transform: none !important;
     scale: none !important;
   }
 }
 
+/* Contraste renforcé : des bords nets plutôt que des nuances. */
+@media (prefers-contrast: more) {
+  :root {
+    --edt-line: color-mix(in srgb, var(--edt-text) 40%, transparent);
+  }
+}
+
 /* --------------------------------------------------------------------------
-   4. Utilitaires
+   4. Responsive (INTEGRATION.md § 7)
    -------------------------------------------------------------------------- */
 
-/*
- * La zone qui défile sous le bandeau. Son `padding-top` est compensé par les
- * en-têtes collants de chaque grille (`sticky-head`) : ils collent au bord
- * réel de la zone sans laisser passer le contenu dans ce padding.
- */
-@utility timetable {
-  --timetable-pad: clamp(0.75rem, 3vw, 1.25rem);
+@media (max-width: 900px) {
+  :root { --tabbar-height: calc(64px + env(safe-area-inset-bottom)); }
 
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-  padding-top: var(--timetable-pad);
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-  /* Le défilement latéral s'arrête proprement sur un jour. */
-  scroll-snap-type: x proximity;
-  scroll-padding-left: var(--spacing-edge);
-  /*
-   * Sans cela, un balayage vers la droite est capté par le navigateur comme un
-   * retour en arrière : la page disparaît au lieu de changer de jour.
-   */
-  overscroll-behavior: contain;
+  .app { grid-template-columns: minmax(0, 1fr); }
+  /* Le menu devient la barre d'onglets du bas : Semaine, Salles, Devoirs, Plus. */
+  .rail {
+    position: fixed; inset: auto 0 0 0; z-index: 40; height: auto; overflow: visible;
+    flex-direction: row; justify-content: space-around; gap: 0;
+    border-right: 0; border-top: 1px solid var(--edt-line); background: var(--edt-surface-1);
+    padding: 6px 8px max(8px, env(safe-area-inset-bottom));
+  }
+  .rail .logo, .rail .sp, .rail .ni-extra { display: none; }
+  .rail .ni { width: auto; min-width: 64px; min-height: 52px; justify-content: center; padding: 6px 4px; }
+  .rail .ni-more { display: flex; }
+  .main { padding: 20px 16px calc(var(--tabbar-height) + 20px); gap: 18px; min-height: 0; }
+  .app h1 { font-size: 28px; }
+  .top { align-items: flex-start; gap: 14px; }
+  .wk { padding-left: 14px; }
 }
 
-@utility sticky-head {
-  position: sticky;
-  top: calc(-1 * var(--timetable-pad, 0px));
-  padding-top: var(--timetable-pad, 0px);
+@media (max-width: 520px) {
+  .top > .row { width: 100%; }
+  .wk { width: 100%; justify-content: space-between; }
 }
 
-/* La lumière vient du haut : le bandeau s'éclaircit vers son bord supérieur. */
-@utility bg-banner {
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklab, var(--color-accent) 94%, white) 0%,
-    var(--color-accent) 60%,
-    color-mix(in oklab, var(--color-accent) 94%, black) 100%
-  );
-}
+/* --------------------------------------------------------------------------
+   5. Utilitaires
+   -------------------------------------------------------------------------- */
 
-/* Fond d'un créneau : la couleur de sa nature, fondue dans la surface. */
+/* Fond d'un créneau : celui de sa nature. */
 @utility bg-kind-tint {
-  background-color: color-mix(in oklab, var(--color-kind) var(--kind-fill), var(--color-surface));
+  background-color: var(--kind-bg, var(--edt-surface-2));
 }
 
-/* Texte dans la couleur de sa nature, assez sombre pour se lire. */
+/* Texte dans la couleur de sa nature, déjà calculée pour le contraste. */
 @utility text-kind-ink {
-  color: color-mix(in oklab, var(--color-kind) var(--kind-ink), var(--color-text));
+  color: var(--color-kind);
 }
 
-/* Filets horaires : trait net à l'heure, plus clair à la demie. */
-@utility hour-lines {
-  background-position-y: var(--body-pad);
-  background-image:
-    repeating-linear-gradient(to bottom, var(--color-line) 0 1px, transparent 1px var(--hour-height)),
-    repeating-linear-gradient(
-      to bottom,
-      color-mix(in oklab, var(--color-line) 55%, transparent) 0 1px,
-      transparent 1px calc(var(--hour-height) / 2)
-    );
-}
-
-/* Les mêmes, à l'horizontale, pour le planning des salles. */
+/* Filets horaires du planning des salles, à l'horizontale. */
 @utility hour-lines-x {
   background-image:
-    repeating-linear-gradient(to right, var(--color-line) 0 1px, transparent 1px var(--hour-width)),
+    repeating-linear-gradient(to right, var(--edt-line) 0 1px, transparent 1px var(--hour-width)),
     repeating-linear-gradient(
       to right,
-      color-mix(in oklab, var(--color-line) 55%, transparent) 0 1px,
+      color-mix(in srgb, var(--edt-line) 55%, transparent) 0 1px,
       transparent 1px calc(var(--hour-width) / 2)
     );
 }

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compte</title>
+<meta name="theme-color" content="#FF5252">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;600;700&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../css/tokens.css">
+<link rel="stylesheet" href="../css/components.css">
+<style>body{margin:0}.pt{display:grid;grid-template-columns:44px minmax(0,1fr);gap:16px;align-items:start}.pt i{width:44px;height:44px;border-radius:12px;background:var(--acs);display:grid;place-items:center;color:var(--edt-accent-text)}</style>
+</head>
+<body>
+<div class="app" style="width: 100%; min-height: 900px">
+<nav class="rail" aria-label="Navigation">
+<div class="logo">EDT</div>
+<a class="ni" href="semaine-grille.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>Semaine</a>
+<a class="ni" href="comparer.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M12 4v16"/></svg>Comparer</a>
+<a class="ni" href="enseignants.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg>Enseignants</a>
+<a class="ni" href="salles.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4a1 1 0 011-1h9a1 1 0 011 1v17"/><path d="M3 21h18M12 12v.01"/></svg>Salles</a>
+<a class="ni" href="analyse.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Analyse</a>
+<a class="ni" href="devoirs.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6l2 2 3-3M4 14l2 2 3-3M13 7h7M13 15h7"/></svg>Devoirs</a>
+<div class="sp"></div>
+<a class="ni on" href="compte.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>Compte</a>
+<a class="ni" href="reglages.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Réglages</a>
+</nav>
+<main class="main">
+<div class="top"><div><h1>Compte</h1><p class="sub">Ta classe et tes messages privés sur Discord.</p></div></div>
+<div style="flex: 1; display: grid; place-items: center; padding-bottom: 60px">
+<div class="card" style="max-width: 560px; width: 100%; padding: 36px; display: flex; flex-direction: column; gap: 24px">
+<h2 style="font: 600 28px/1.15 'Bricolage Grotesque', sans-serif">Reçois ton emploi du temps sur Discord</h2>
+<div style="display: flex; flex-direction: column; gap: 18px">
+<div class="pt"><i><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/></svg></i><p style="line-height: 1.5">Chaque nouvelle semaine publiée, en message privé, avec son fichier <b>.ics</b>.</p></div>
+<div class="pt"><i><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg></i><p style="line-height: 1.5">Un message dès qu'un cours de ta classe change : salle, horaire, enseignant.</p></div>
+</div>
+<p style="color: var(--mu); font-size: 14px; line-height: 1.5">Tu seras ajouté au serveur Discord de l'emploi du temps : sans serveur commun, le bot ne peut pas t'écrire. Seuls ton identifiant, ton pseudo et ton avatar sont conservés.</p>
+<button class="btn discord" style="justify-content: center; min-height: 52px; font-size: 16px">Se connecter avec Discord</button>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>

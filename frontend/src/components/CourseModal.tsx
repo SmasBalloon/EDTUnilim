@@ -15,7 +15,7 @@ import { groupLabel } from '../lib/groups';
 import { KIND_LABEL } from '../lib/layout';
 import { settings, update } from '../lib/settings';
 import { humanDuration, longDate } from '../lib/time';
-import { badge, button, fieldLabel } from '../lib/ui';
+import { button, kindTag, label } from '../lib/ui';
 import { Sheet } from './Sheet';
 
 interface Props {
@@ -66,21 +66,22 @@ export const CourseModal: Component<Props> = (props) => {
             <header class="mb-5 flex items-start justify-between gap-4">
               <div>
                 {/* « lundi 7 septembre » : seule l'initiale se capitalise en français. */}
-                <p class="text-sm font-semibold first-letter:uppercase">{longDate(course().date)}</p>
+                <p class="font-semibold first-letter:uppercase">{longDate(course().date)}</p>
                 <p class="mt-0.5 text-sm text-muted tabular-nums">
                   {`${course().start} – ${course().end} · ${humanDuration(course().duration_minutes)}`}
                 </p>
               </div>
-              <button type="button" class={button.plain} onClick={props.onClose} aria-label="Fermer">
-                <X size={16} aria-hidden="true" />
+              <button type="button" class={button.icon} onClick={props.onClose} aria-label="Fermer">
+                <X size={20} aria-hidden="true" />
               </button>
             </header>
 
-            <div class="flex items-center gap-2.5">
-              <span class={badge.kind}>{KIND_LABEL[course().kind]}</span>
-              <h2 class="text-2xl font-semibold">
+            <div class="flex items-center gap-3">
+              <h2 class="font-display text-[28px] leading-tight font-semibold">
                 {course().resource?.code ?? course().title ?? 'Cours'}
               </h2>
+              <span class={kindTag(course().kind)}>{KIND_LABEL[course().kind]}</span>
+              <Show when={course().room}>{(room) => <span class="tag t-room">{room()}</span>}</Show>
             </div>
 
             <Show when={course().resource?.name ?? course().title}>
@@ -90,7 +91,7 @@ export const CourseModal: Component<Props> = (props) => {
             <Show when={props.slot}>
               {(slot) => (
                 <section class="mt-5 border-t border-line pt-4">
-                  <h3 class={fieldLabel}>Devoirs</h3>
+                  <h3 class={`${label} mb-2.5`}>Devoirs</h3>
                   <ul class="mb-2.5 grid gap-1.5">
                     <For each={about(course())}>
                       {(item) => (
@@ -102,7 +103,7 @@ export const CourseModal: Component<Props> = (props) => {
                           <Show when={item.mine && !onCourse(item, course())}>
                             <button
                               type="button"
-                              class={button.plain}
+                              class={button.small}
                               title="Rattacher à ce cours"
                               onClick={() => void attach(item, course(), slot())}
                             >
@@ -117,7 +118,7 @@ export const CourseModal: Component<Props> = (props) => {
 
                   <button
                     type="button"
-                    class={`${button.plain} w-full`}
+                    class={`${button.plain} wide`}
                     onClick={() =>
                       props.onNote?.({
                         resource: course().resource?.code ?? null,
@@ -127,7 +128,7 @@ export const CourseModal: Component<Props> = (props) => {
                       })
                     }
                   >
-                    <NotebookPen size={16} aria-hidden="true" />
+                    <NotebookPen size={20} aria-hidden="true" />
                     Noter un devoir pour ce cours
                   </button>
                 </section>
@@ -146,7 +147,7 @@ export const CourseModal: Component<Props> = (props) => {
                         {(id) => (
                           <button
                             type="button"
-                            class="cursor-pointer text-start underline decoration-accent/60 underline-offset-[0.15em] hover:text-accent"
+                            class="lnk cursor-pointer text-start hover:text-accent-ink"
                             onClick={() => {
                               update({ teacher: id() });
                               props.onClose();

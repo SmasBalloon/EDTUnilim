@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Semaine — style Apple, iPhone</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>body{margin:0}
+.ap{--bg:#F2F2F7;--sf:#FFFFFF;--hl:rgba(60,60,67,.14);--tx:#1D1D1F;--mu:#6E6E73;--bl:#0071E3;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter',system-ui,sans-serif;color:var(--tx);background:var(--bg);-webkit-font-smoothing:antialiased;letter-spacing:-.01em;box-sizing:border-box}
+.ap *{box-sizing:border-box}
+.ap h1,.ap h2,.ap p{margin:0}
+.nb{display:flex;justify-content:space-between;align-items:center;min-height:44px}
+.lk{min-height:44px;border:0;background:none;color:var(--bl);font:400 17px inherit;font-family:inherit;display:inline-flex;align-items:center;gap:2px;padding:0;cursor:pointer}
+.ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.days{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.days button{min-height:62px;border:0;border-radius:14px;background:transparent;font-family:inherit;color:var(--tx);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer}
+.days button span{font-size:12px;font-weight:600;color:var(--mu)}
+.days button b{font-size:20px;font-weight:600}
+.days button.on{background:var(--tx);color:#fff}
+.days button.on span{color:rgba(255,255,255,.75)}
+.cap{font-size:13px;color:var(--mu);padding:0 16px 6px;text-transform:uppercase;letter-spacing:.02em}
+.grp{background:var(--sf);border-radius:12px;overflow:hidden}
+.r{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 16px;position:relative;min-height:60px}
+.r+.r::before{content:"";position:absolute;top:0;left:76px;right:0;border-top:1px solid var(--hl)}
+.r .tt{display:flex;flex-direction:column;font-variant-numeric:tabular-nums;font-size:14px;line-height:1.3}
+.r .tt b{font-weight:600}.r .tt span{color:var(--mu)}
+.r .ct b{font-size:16px;font-weight:600;display:block}
+.r .ct span{font-size:13px;color:var(--mu);display:block;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ty{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700}
+.ty i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.y-sae{color:#18803A}.y-sae i{background:#34C759}
+.y-cm{color:#8F5100}.y-cm i{background:#FFCC00}
+.y-td{color:#B93A08}.y-td i{background:#FF9500}
+.y-tp{color:#0058B0}.y-tp i{background:#007AFF}
+.tab{display:flex;justify-content:space-around;padding:6px 8px 18px;background:rgba(249,249,249,.88);backdrop-filter:saturate(180%) blur(20px);border-top:1px solid var(--hl)}
+.tab a{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:64px;min-height:44px;justify-content:center;color:#7A7A80;font-size:10px;font-weight:500;text-decoration:none}
+.tab a.on{color:var(--bl)}
+.tab svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}</style>
+</head>
+<body>
+<div class="ap" style="width: 390px; height: 844px; display: flex; flex-direction: column; overflow: hidden">
+<div style="flex: 1; overflow: hidden; padding: 8px 16px 0; display: flex; flex-direction: column; gap: 14px">
+<div class="nb"><button class="lk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>S7</button><span style="font-size: 13px; color: var(--mu)">G7B · BUT 3</span><button class="lk">S9<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div>
+<div><h1 style="font-size: 34px; font-weight: 700; letter-spacing: -.03em">Semaine 8</h1><p style="font-size: 15px; color: var(--mu); margin-top: 2px">19 – 23 octobre · 20 cours</p></div>
+<div class="days"><button class="on"><span>Lun</span><b>19</b></button><button><span>Mar</span><b>20</b></button><button><span>Mer</span><b>21</b></button><button><span>Jeu</span><b>22</b></button><button><span>Ven</span><b>23</b></button></div>
+<div style="margin: 0 -16px; padding: 0 16px; display: flex; flex-direction: column; gap: 6px">
+<p class="cap">Matin · 2 cours</p>
+<div class="grp">
+<div class="r"><div class="tt"><b>08:00</b><span>10:00</span></div><div class="ct"><b>S5A.01</b><span>SAE Encadrée · 108-9</span></div><span class="ty y-sae"><i></i>SAÉ</span></div>
+<div class="r"><div class="tt"><b>10:00</b><span>12:00</span></div><div class="ct"><b>S5A.01</b><span>SAE Encadrée · 108-9</span></div><span class="ty y-sae"><i></i>SAÉ</span></div>
+</div>
+<p class="cap" style="margin-top: 14px">Après-midi · 3 cours</p>
+<div class="grp">
+<div class="r"><div class="tt"><b>13:30</b><span>15:30</span></div><div class="ct"><b>S5A.02</b><span>R47 · avec G7</span></div><span class="ty y-sae"><i></i>SAÉ</span></div>
+<div class="r"><div class="tt"><b>15:30</b><span>17:00</span></div><div class="ct"><b>R5A.12</b><span>Modélisations math. · 205</span></div><span class="ty y-cm"><i></i>CM</span></div>
+<div class="r"><div class="tt"><b>17:30</b><span>19:30</span></div><div class="ct"><b>R5A.05</b><span>Programmation avancée · 103</span></div><span class="ty y-td"><i></i>TD</span></div>
+</div>
+<p style="font-size: 13px; color: var(--mu); padding: 8px 16px 0">Pause de 1 h 30 à midi · 9 h 30 de cours</p>
+</div>
+</div>
+<nav class="tab" aria-label="Navigation">
+<a class="on" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>Semaine</a>
+<a href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4a1 1 0 011-1h9a1 1 0 011 1v17"/><path d="M3 21h18M12 12v.01"/></svg>Salles</a>
+<a href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6l2 2 3-3M4 14l2 2 3-3M13 7h7M13 15h7"/></svg>Devoirs</a>
+<a href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Réglages</a>
+</nav>
+</div>
+</body>
+</html>

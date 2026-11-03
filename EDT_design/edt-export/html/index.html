@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EDT — maquettes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;600;700&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../css/tokens.css">
+<link rel="stylesheet" href="../css/components.css">
+<style>
+.wrap{max-width:880px;margin:0 auto;padding:56px 24px;display:flex;flex-direction:column;gap:32px;color:var(--edt-text);font-family:var(--edt-font-body)}
+.wrap h1{font:600 40px/1.1 var(--edt-font-display);letter-spacing:-.025em;margin:0}
+.wrap h2{font:600 20px var(--edt-font-display);margin:0 0 12px}
+.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.list a{display:flex;flex-direction:column;gap:4px;padding:16px 18px;border-radius:14px;background:var(--edt-surface-1);border:1px solid var(--edt-line);color:var(--edt-text);text-decoration:none;min-height:64px}
+.list a:hover{border-color:var(--edt-accent)}
+.list small{color:var(--edt-muted);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div><h1>EDT · IUT info Limoges</h1><p style="color:var(--edt-muted);margin:8px 0 0">Maquettes de la refonte — Proposition 1 (thème sombre).</p></div>
+<section><h2>Écrans bureau</h2><div class="list">
+<a href="accueil.html">Accueil<small>Choix de l'année, du groupe, du sous-groupe</small></a>
+<a href="semaine-grille.html">Semaine — grille<small>Échelle horaire 08:00 → 20:00</small></a>
+<a href="semaine-liste.html">Semaine — liste<small>5 jours en colonnes, cours à la suite</small></a>
+<a href="comparer.html">Comparer deux classes<small>Heure par heure, cours communs, créneaux libres</small></a>
+<a href="enseignants.html">Enseignants<small>Semaine d'un enseignant, 3 années réunies</small></a>
+<a href="salles.html">Salles libres<small>Libres / occupées sur un créneau</small></a>
+<a href="analyse.html">Analyse de PDF<small>Salles réservées deux fois</small></a>
+<a href="devoirs.html">Devoirs<small>À faire / terminés + formulaire</small></a>
+<a href="compte.html">Compte Discord<small>Connexion et notifications</small></a>
+<a href="reglages.html">Réglages<small>Modale : affichage, apparence, couleur, classe, calendrier</small></a>
+</div></section>
+<section><h2>Écrans mobile (390 px)</h2><div class="list">
+<a href="mobile-accueil.html">Mobile — accueil<small>Choix de la classe</small></a>
+<a href="mobile-semaine.html">Mobile — semaine<small>Liste par jour + barre d'onglets</small></a>
+</div></section>
+<section><h2>Variantes (autonomes, non intégrées)</h2><div class="list">
+<a href="alternatives/proposition-2-liste-claire.html">Proposition 2<small>Liste, thème clair, navigation en haut</small></a>
+<a href="alternatives/proposition-3-apple-bureau.html">Proposition 3 — bureau<small>Style Apple</small></a>
+<a href="alternatives/proposition-3-apple-iphone.html">Proposition 3 — iPhone<small>Style Apple</small></a>
+</div></section>
+</div>
+</body>
+</html>

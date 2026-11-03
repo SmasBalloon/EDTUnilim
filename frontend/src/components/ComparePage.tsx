@@ -10,31 +10,18 @@ import {
 } from 'solid-js';
 import { ArrowLeftRight, Plus } from 'lucide-solid';
 
+
 import { ApiError, fetchWeek, type Course, type Week, type YearSummary } from '../lib/api';
 import { groupBases, groupLabel, weekDays } from '../lib/groups';
 import { settings, update, type Side } from '../lib/settings';
 import { DAY_ORDER, dayIndex, periodLabel } from '../lib/time';
 import { useCompact } from '../lib/media';
-import {
-  button,
-  card,
-  centered,
-  chip,
-  field,
-  fieldLabel,
-  fieldRow,
-  note,
-  notice,
-  page,
-  pick,
-  pickName,
-  summary,
-} from '../lib/ui';
+import { button, chip, fieldRow, label as lbl, note, notice } from '../lib/ui';
 import { CompareGrid } from './CompareGrid';
 import { DayTabs } from './DayTabs';
-import { Footer } from './Footer';
 import { GroupPicker } from './GroupPicker';
 import { Pager } from './Pager';
+import { Empty, Foot, PageHead } from './Shell';
 import { Sheet, SheetHeader } from './Sheet';
 import { WeekBar } from './WeekBar';
 import { WeekFrame } from './WeekView';
@@ -150,69 +137,18 @@ export const ComparePage: Component<Props> = (props) => {
     return data ? periodLabel(data.filtered) : undefined;
   });
 
-  // Sur écran étroit, la semaine se feuillette : un jour par page. On retient
-  // le jour ouvert plutôt que son rang, pour que la page soit juste dès le
-  // premier rendu — sinon elle part de lundi et glisse jusqu'à aujourd'hui.
+  // Un jour à la fois (comparer.html). On retient le jour ouvert plutôt que
+  // son rang, pour que la page soit juste dès le premier rendu.
   const [chosen, setChosen] = createSignal<string | null>(null);
   const index = () => dayIndex(days(), chosen());
 
-  const grid = (only: { name: string; date: string }[]) => (
-    <CompareGrid
-      days={only}
-      left={sides().left}
-      right={sides().right}
-      onSelect={props.onSelect}
-    />
+  const grid = (date: string) => (
+    <CompareGrid date={date} left={sides().left} right={sides().right} onSelect={props.onSelect} />
   );
 
   return (
-    <div class={page}>
-      <div class={summary}>
-        {/* Les deux classes se choisissent du même geste, et pèsent le même
-            poids à l'écran : rien ne dit laquelle est « la mienne ». */}
-        <div class={`${card} flex items-center gap-2 p-2`}>
-          <For each={['left', 'right'] as Which[]}>
-            {(which, position) => (
-              <>
-                <Show when={position() === 1}>
-                  <button
-                    type="button"
-                    class={button.round}
-                    onClick={swap}
-                    aria-label="Échanger les deux classes"
-                    title="Échanger les deux classes"
-                  >
-                    <ArrowLeftRight size={16} aria-hidden="true" />
-                  </button>
-                </Show>
-                <button
-                  type="button"
-                  class={`${pick} min-w-0 flex-1 justify-center gap-1.5`}
-                  onClick={() => setEditing(which)}
-                  aria-label={`Changer la classe ${position() === 0 ? 'de gauche' : 'de droite'}`}
-                >
-                  <Show
-                    when={side(which)}
-                    fallback={
-                      <>
-                        <Plus size={16} aria-hidden="true" />
-                        <span class={pickName}>Choisir une classe</span>
-                      </>
-                    }
-                  >
-                    {(chosen) => (
-                      <>
-                        <span class={pickName}>{groupLabel(chosen().group)}</span>
-                        <span class="whitespace-nowrap text-xs text-muted">{`BUT ${chosen().year}`}</span>
-                      </>
-                    )}
-                  </Show>
-                </button>
-              </>
-            )}
-          </For>
-        </div>
-
+    <>
+      <PageHead title="Comparer" sub="Deux classes côte à côte, heure par heure.">
         <WeekBar
           week={props.week}
           weeks={props.years.find((item) => item.year === side('left')?.year)?.weeks ?? []}
@@ -220,62 +156,97 @@ export const ComparePage: Component<Props> = (props) => {
           period={period()}
           onWeek={props.onWeek}
         />
+      </PageHead>
+
+      {/* Les deux classes se choisissent du même geste, et pèsent le même
+          poids à l'écran : rien ne dit laquelle est « la mienne ». */}
+      <div class="row flex-nowrap gap-3">
+        <For each={['left', 'right'] as Which[]}>
+          {(which, position) => (
+            <>
+              <Show when={position() === 1}>
+                <button
+                  type="button"
+                  class={button.icon}
+                  onClick={swap}
+                  aria-label="Inverser les classes"
+                  title="Inverser les classes"
+                >
+                  <ArrowLeftRight size={22} aria-hidden="true" />
+                </button>
+              </Show>
+              <button
+                type="button"
+                class="cmp-cls"
+                onClick={() => setEditing(which)}
+                aria-label={`Changer la classe ${position() === 0 ? 'de gauche' : 'de droite'}`}
+              >
+                <Show
+                  when={side(which)}
+                  fallback={
+                    <>
+                      <Plus size={20} aria-hidden="true" />
+                      <span class="truncate">Choisir</span>
+                    </>
+                  }
+                >
+                  {(picked) => (
+                    <>
+                      <span class="truncate">{groupLabel(picked().group)}</span>
+                      <small class="whitespace-nowrap">{`BUT ${picked().year}`}</small>
+                    </>
+                  )}
+                </Show>
+              </button>
+            </>
+          )}
+        </For>
       </div>
 
-      <main class="timetable">
-        <Show
-          when={side('right')}
-          fallback={
-            <div class={centered}>
-              <p>Choisis une seconde classe pour la mettre en regard de la tienne.</p>
+      <Show
+        when={side('right')}
+        fallback={
+          <Empty title="Une seule classe">Choisis une seconde classe pour la mettre en regard de la tienne.</Empty>
+        }
+      >
+        <Show when={days().length > 0} fallback={<Empty>Chargement…</Empty>}>
+          <div class="row justify-between">
+            <Show when={!compact()}>
+              <DayTabs
+                days={days()}
+                selected={days()[index()]?.date ?? ''}
+                onSelect={setChosen}
+                dated
+              />
+            </Show>
+            <div class="row gap-3.5 text-[13px] text-muted">
+              <span class="tag t-room cmp-both">ensemble</span>
+              <span class="tag t-sae">libres tous les deux</span>
             </div>
-          }
-        >
-          <Show when={days().length > 0} fallback={<div class={centered}><p>Chargement…</p></div>}>
-            <For each={troubles()}>
-              {(said) => <p class={`${notice()} mx-edge mb-2.5`}>{said}</p>}
-            </For>
+          </div>
 
-            <WeekFrame single={compact()}>
-              <Show when={compact()}>
-                <DayTabs
-                  days={days()}
-                  selected={days()[index()]?.date ?? ''}
-                  onSelect={setChosen}
-                />
-              </Show>
+          <For each={troubles()}>{(said) => <p class={notice()}>{said}</p>}</For>
 
-              <Show when={compact()} fallback={grid(days())}>
-                <Pager
-                  items={days()}
-                  index={index()}
-                  onIndex={(position) => setChosen(days()[position]?.date ?? null)}
-                  enabled={compact()}
-                >
-                  {(day) => grid([day])}
-                </Pager>
-              </Show>
+          <Show when={compact()} fallback={grid(days()[index()]?.date ?? '')}>
+            <WeekFrame>
+              <DayTabs days={days()} selected={days()[index()]?.date ?? ''} onSelect={setChosen} />
+              <Pager
+                items={days()}
+                index={index()}
+                onIndex={(position) => setChosen(days()[position]?.date ?? null)}
+                enabled
+              >
+                {(day) => grid(day.date)}
+              </Pager>
             </WeekFrame>
           </Show>
         </Show>
-      </main>
+      </Show>
 
-      <Footer>
-        <span class="inline-flex items-center gap-1.5">
-          <span
-            class="size-3.5 rounded-[0.3125rem] border-[1.5px] border-dashed border-accent/65 bg-accent/10"
-            aria-hidden="true"
-          />
-          ensemble
-        </span>
-        <span class="inline-flex items-center gap-1.5">
-          <span
-            class="kind-sae size-3.5 rounded-[0.3125rem] border border-dashed border-kind/55 bg-kind/14"
-            aria-hidden="true"
-          />
-          libres tous les deux
-        </span>
-      </Footer>
+      <Foot>
+        <span>Le contour rouge marque les cours suivis ensemble</span>
+        <span>Le vert marque les créneaux où personne n'a cours</span>
+      </Foot>
 
       <Editor
         which={editing()}
@@ -285,7 +256,7 @@ export const ComparePage: Component<Props> = (props) => {
         onChoose={choose}
         onClose={() => setEditing(null)}
       />
-    </div>
+    </>
   );
 };
 
@@ -329,8 +300,8 @@ const Editor: Component<EditorProps> = (props) => {
         onClose={props.onClose}
       />
 
-      <section class={field}>
-        <h3 class={fieldLabel}>Année</h3>
+      <section class="sec mb-7">
+        <h3 class={lbl}>Année</h3>
         <div class={fieldRow}>
           <For each={props.years}>
             {(item) => (
@@ -347,7 +318,7 @@ const Editor: Component<EditorProps> = (props) => {
         </div>
       </section>
 
-      <section class={field}>
+      <section>
         <Show
           when={structure()}
           fallback={<p class={note}>{structure.error ? 'Semaine non publiée pour cette année.' : 'Lecture des groupes…'}</p>}

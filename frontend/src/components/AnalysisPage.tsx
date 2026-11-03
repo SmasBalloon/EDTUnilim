@@ -1,24 +1,12 @@
 import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
-import { CircleCheck, FileUp, ScanSearch, X } from 'lucide-solid';
+import { FileUp, X } from 'lucide-solid';
 
 import { ApiError, analyse, type Analysis, type Course, type RoomConflict } from '../lib/api';
 import { KIND_LABEL } from '../lib/layout';
-import { longDate, shortDate } from '../lib/time';
-import {
-  badge,
-  button,
-  card,
-  cx,
-  input,
-  kindEdge,
-  note,
-  notice,
-  page,
-  pill,
-  press,
-  sectionTitle,
-  summary,
-} from '../lib/ui';
+import { longDate, shortDate, toMinutes } from '../lib/time';
+import { formatMinutes } from '../lib/rooms';
+import { button, cx, kindTag, notice, sectionTitle } from '../lib/ui';
+import { Empty, Foot, PageHead } from './Shell';
 
 /** Un PDF par année : au-delà, deux versions d'une même année se disputeraient leurs salles. */
 const MAX_FILES = 3;
@@ -38,11 +26,17 @@ function yearFromName(name: string): number | null {
 
 const isPdf = (file: File) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
-/** Retirer un fichier : discret, dans la pastille du fichier. */
-const removeButton = cx(
-  press,
-  'grid size-8 cursor-pointer place-items-center rounded-lg text-muted hover:bg-surface hover:text-text pointer-coarse:size-10',
-);
+/** `412 Ko` */
+const size = (bytes: number) => `${Math.max(1, Math.round(bytes / 1024))} Ko`;
+
+/** Le créneau où les réservations se chevauchent : `10:00 – 11:30`. */
+function overlap(conflict: RoomConflict): string {
+  const starts = conflict.bookings.map(({ course }) => toMinutes(course.start));
+  const ends = conflict.bookings.map(({ course }) => toMinutes(course.end));
+  const from = Math.max(...starts);
+  const to = Math.min(...ends);
+  return to > from ? `${formatMinutes(from)} – ${formatMinutes(to)}` : '';
+}
 
 /** Libellé de salle comparable, comme côté API. */
 const normalise = (room: string) => room.trim().toUpperCase();
@@ -117,49 +111,50 @@ export const AnalysisPage: Component = () => {
   };
 
   const conflictCard = (conflict: RoomConflict) => (
-    <li class={`${card} overflow-hidden`}>
-      <div class="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-        <span class={badge.accent}>{`Salle ${conflict.room}`}</span>
-        <span class="text-sm font-medium first-letter:uppercase">{longDate(conflict.date)}</span>
+    <li class="card ana-cf">
+      <div>
+        <p class="room">{conflict.room}</p>
+        <p class="when first-letter:uppercase">{[longDate(conflict.date), overlap(conflict)].filter(Boolean).join(' · ')}</p>
       </div>
-      <ul class="grid gap-1.5 p-2">
-        <For each={conflict.bookings}>
-          {({ year, course }) => (
-            <li
-              class={cx(
-                `kind-${course.kind}`,
-                kindEdge,
-                'grid gap-0.5 rounded-control bg-elevated px-3 py-2 text-[0.8125rem]',
-              )}
-            >
-              <p class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span class="font-semibold tabular-nums">{`${course.start}–${course.end}`}</span>
-                <span class={pill}>{`BUT ${year}`}</span>
-                <span class={badge.kind}>{KIND_LABEL[course.kind]}</span>
-                <span class="font-medium">{course.resource?.code ?? course.title ?? ''}</span>
-              </p>
-              <p class="flex flex-wrap gap-x-3 text-muted">
-                <span>{course.groups.join(', ')}</span>
-                <Show when={teacherOf(course)}>{(teacher) => <span>{teacher()}</span>}</Show>
-                {/* La salle telle que le PDF l'écrit, sur chaque cours : `108` face à `108-9`
-                    montre d'un coup d'œil d'où vient le conflit. */}
-                <Show when={course.room}>{(room) => <span>{`salle ${room()}`}</span>}</Show>
-              </p>
-            </li>
-          )}
-        </For>
-      </ul>
+      <For each={conflict.bookings}>
+        {({ year, course }) => (
+          <div class="ana-cc">
+            <div class="row justify-between gap-2">
+              <b class="min-w-0 truncate">
+                {[course.resource?.code ?? course.title, course.resource?.name].filter(Boolean).join(' · ') || 'Cours'}
+              </b>
+              <span class="row gap-1.5">
+                <span class={kindTag(course.kind)}>{KIND_LABEL[course.kind]}</span>
+                <span class={`tag y${year}`}>{`BUT ${year}`}</span>
+              </span>
+            </div>
+            {/* La salle telle que le PDF l'écrit, sur chaque cours : `108` face à `108-9`
+                montre d'un coup d'œil d'où vient le conflit. */}
+            <small>
+              {[
+                `${course.start} – ${course.end}`,
+                course.groups.join(', '),
+                teacherOf(course),
+                course.room && `salle ${course.room}`,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </small>
+          </div>
+        )}
+      </For>
     </li>
   );
 
-  /** Un fichier déposé : son nom, son année, et de quoi le retirer. */
+  /** Un fichier déposé : son nom, son poids, son année, et de quoi le retirer. */
   const fileChip = (item: Dropped, index: () => number) => (
-    <li class="flex min-w-0 items-center gap-1.5 rounded-control border border-line bg-elevated py-0.5 ps-2.5 pe-0.5">
-      <span class="min-w-0 max-w-44 truncate text-[0.8125rem]" title={item.file.name}>
+    <li class="ana-file">
+      <span class="name" title={item.file.name}>
         {item.file.name}
       </span>
+      <small>{size(item.file.size)}</small>
       <select
-        class={input({ invalid: item.year === null })}
+        aria-invalid={item.year === null}
         aria-label={`Année de ${item.file.name}`}
         value={item.year ?? ''}
         onChange={(event) => setYear(index(), event.currentTarget.value ? Number(event.currentTarget.value) : null)}
@@ -167,151 +162,124 @@ export const AnalysisPage: Component = () => {
         <option value="">Année…</option>
         <For each={YEARS}>{(year) => <option value={year}>{`BUT ${year}`}</option>}</For>
       </select>
-      <button
-        type="button"
-        class={removeButton}
-        title="Retirer"
-        aria-label={`Retirer ${item.file.name}`}
-        onClick={() => remove(index())}
-      >
-        <X size={15} aria-hidden="true" />
+      <button type="button" class="x" title="Retirer" aria-label={`Retirer ${item.file.name}`} onClick={() => remove(index())}>
+        <X size={16} aria-hidden="true" />
       </button>
     </li>
   );
 
   return (
-    <div class={page}>
-      {/* La carte de dépôt reste en tête, posée sur le bandeau comme sur les
-          autres pages ; seuls les résultats défilent, sous le bandeau. */}
-      <div class={summary}>
-        <div
-          class={cx(
-            card,
-            'flex flex-wrap items-center gap-2 p-2 transition-colors',
-            over() && 'border-accent bg-accent-wash',
-          )}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setOver(true);
-          }}
-          onDragLeave={(event) => {
-            // Passer d'un enfant à l'autre n'est pas quitter la carte.
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(false);
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            setOver(false);
-            add(event.dataTransfer?.files ?? null);
-          }}
-        >
+    <>
+      <PageHead title="Analyse" sub="Les salles réservées deux fois dans les PDF que tu déposes." />
+
+      <div
+        class={cx('card ana-drop', over() && 'over')}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={(event) => {
+          // Passer d'un enfant à l'autre n'est pas quitter la carte.
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setOver(false);
+          add(event.dataTransfer?.files ?? null);
+        }}
+      >
+        <FileUp size={36} strokeWidth={1.5} class="text-muted" aria-hidden="true" />
+        <h2>Dépose les emplois du temps d’une même semaine</h2>
+        <p>
+          Publiés ou pas encore — un par année, trois au plus. Rien n’est conservé. Un logiciel peut se tromper : un
+          conflit non détecté n’est pas impossible.
+        </p>
+        <div class="row mt-1.5">
           <button type="button" class={button.plain} onClick={() => picker?.click()}>
-            <FileUp size={16} aria-hidden="true" />
             Choisir des PDF
           </button>
-          <input
-            ref={picker}
-            type="file"
-            accept=".pdf,application/pdf"
-            multiple
-            class="hidden"
-            onChange={(event) => {
-              add(event.currentTarget.files);
-              // Le même fichier pourra être redéposé après un retrait.
-              event.currentTarget.value = '';
-            }}
-          />
+        </div>
+        <input
+          ref={picker}
+          type="file"
+          accept=".pdf,application/pdf"
+          multiple
+          class="hidden"
+          onChange={(event) => {
+            add(event.currentTarget.files);
+            // Le même fichier pourra être redéposé après un retrait.
+            event.currentTarget.value = '';
+          }}
+        />
+      </div>
 
-          <Show
-            when={files().length > 0}
-            fallback={<span class="text-[0.8125rem] text-muted">ou glisse-les ici — un par année, trois au plus.</span>}
-          >
-            <ul class="order-last flex w-full min-w-0 flex-wrap gap-2">
-              <For each={files()}>{fileChip}</For>
-            </ul>
-          </Show>
-
-          <div class="ms-auto flex items-center gap-2">
-            <Show when={files().length > 0 && blocker()}>
-              {(reason) => <span class="text-[0.8125rem] text-muted">{reason()}</span>}
-            </Show>
+      <Show when={files().length > 0}>
+        <div class="row justify-between">
+          <ul class="row min-w-0">
+            <For each={files()}>{fileChip}</For>
+          </ul>
+          <div class="row">
+            <Show when={blocker()}>{(reason) => <span class="text-sm text-muted">{reason()}</span>}</Show>
             <button
               type="button"
-              class={button.primary}
+              class={`${button.primary} min-h-12!`}
               disabled={blocker() !== null || busy()}
               onClick={() => void run()}
             >
-              <ScanSearch size={16} aria-hidden="true" />
               {busy() ? 'Analyse…' : 'Analyser'}
             </button>
           </div>
         </div>
-      </div>
+      </Show>
 
-      <main class="timetable">
-        <div class="mx-auto grid w-full max-w-176 gap-gap px-edge pb-6">
-          {/* La lecture des PDF reste une interprétation : on le dit, discrètement, avant tout résultat. */}
-          <p class="text-center text-2xs text-muted">
-            Logiciel non officiel : une erreur n’est pas impossible, et un conflit peut ne pas être trouvé.
-          </p>
+      <Show when={error()}>{(message) => <p class={notice(true)}>{message()}</p>}</Show>
 
-          <Show when={error()}>{(message) => <p class={notice(true)}>{message()}</p>}</Show>
+      <Show when={result()}>
+        {(analysis) => (
+          <>
+            <ul class={cx(notice(), 'grid gap-1')}>
+              <For each={analysis().weeks}>
+                {(week) => (
+                  <li class="min-w-0 truncate">
+                    <span class="font-semibold">{`BUT ${week.year}`}</span>
+                    <span class="text-muted">
+                      {` · ${week.period.week_number ? `semaine ${week.period.week_number} · ` : ''}${shortDate(week.period.start)} – ${shortDate(week.period.end)} · ${week.courses} cours · ${week.file}`}
+                    </span>
+                  </li>
+                )}
+              </For>
+            </ul>
 
-          <Show
-            when={result()}
-            fallback={
-              <Show when={!error()}>
-                <p class={cx(note, 'px-1 text-center')}>
-                  Dépose les emplois du temps d’une même semaine — publiés ou pas encore — pour voir quelles salles sont
-                  réservées par plusieurs cours en même temps. Rien n’est conservé.
-                </p>
-              </Show>
-            }
-          >
-            {(analysis) => (
-              <>
-                <ul class={cx(notice(), 'grid gap-1')}>
-                  <For each={analysis().weeks}>
-                    {(week) => (
-                      <li class="min-w-0 truncate">
-                        <span class="font-semibold">{`BUT ${week.year}`}</span>
-                        <span class="text-muted">
-                          {` · ${week.period.week_number ? `semaine ${week.period.week_number} · ` : ''}${shortDate(week.period.start)} – ${shortDate(week.period.end)} · ${week.courses} cours · ${week.file}`}
-                        </span>
-                      </li>
-                    )}
-                  </For>
+            <Show when={!analysis().same_dates}>
+              <p class={notice(true)}>
+                Ces PDF ne couvrent pas les mêmes dates : leurs cours ne peuvent pas se chevaucher. Vérifie que ce sont
+                bien les emplois du temps d’une même semaine.
+              </p>
+            </Show>
+
+            <Show
+              when={analysis().conflicts.length > 0}
+              fallback={<Empty title="Aucun conflit">Aucune salle réservée deux fois dans ces PDF.</Empty>}
+            >
+              <section class="flex flex-col gap-3.5">
+                <div class="row gap-2.5">
+                  <h2 class={sectionTitle}>Conflits de salle</h2>
+                  <span class="tag t-room">
+                    {`${analysis().conflicts.length} trouvé${analysis().conflicts.length > 1 ? 's' : ''}`}
+                  </span>
+                </div>
+                <ul class="flex flex-col gap-3.5">
+                  <For each={analysis().conflicts}>{conflictCard}</For>
                 </ul>
+              </section>
+            </Show>
+          </>
+        )}
+      </Show>
 
-                <Show when={!analysis().same_dates}>
-                  <p class={notice(true)}>
-                    Ces PDF ne couvrent pas les mêmes dates : leurs cours ne peuvent pas se chevaucher. Vérifie que ce
-                    sont bien les emplois du temps d’une même semaine.
-                  </p>
-                </Show>
-
-                <Show
-                  when={analysis().conflicts.length > 0}
-                  fallback={
-                    <div class={cx(note, 'grid place-items-center gap-2 py-6 text-center')}>
-                      <CircleCheck size={28} aria-hidden="true" />
-                      <p>Aucune salle réservée deux fois dans ces PDF.</p>
-                    </div>
-                  }
-                >
-                  <section>
-                    <h2 class={sectionTitle}>
-                      Salles réservées plusieurs fois <span class={pill}>{analysis().conflicts.length}</span>
-                    </h2>
-                    <ul class="mt-2 grid gap-3">
-                      <For each={analysis().conflicts}>{conflictCard}</For>
-                    </ul>
-                  </section>
-                </Show>
-              </>
-            )}
-          </Show>
-        </div>
-      </main>
-    </div>
+      <Foot>
+        <span>Logiciel non officiel : une erreur n’est pas impossible, et un conflit peut ne pas être trouvé.</span>
+      </Foot>
+    </>
   );
 };

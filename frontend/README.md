@@ -39,15 +39,21 @@ VITE_API_URL=https://edt.exemple.fr npm run build
   groupes proposés sont ceux réellement présents dans l'emploi du temps — l'API
   ne publie pas de liste, ils se lisent dans les créneaux. Le choix est gardé
   sur l'appareil (`localStorage`).
-- **Deux affichages**, réglables dans les paramètres, tous deux avec un jour par
-  colonne :
-  - *grille horaire* — échelle 8 h – 19 h 30, blocs proportionnels à la durée,
-    couloirs quand deux créneaux se chevauchent, repère de l'heure courante ;
-  - *liste par jour* — les cours à la suite, horaires écrits sur chaque carte.
-- **Mobile** : la semaine se feuillette, un jour par page. La page suit le
-  doigt au pixel près, résiste aux deux bouts de la semaine et part vers le
-  jour que le geste visait, à la vitesse où il a été lâché. Le sélecteur de
-  jour au-dessus fait la même chose, en un toucher.
+- **Navigation** par un menu vertical à gauche (Semaine, Comparer, Enseignants,
+  Salles, Analyse, Devoirs, puis Compte et Réglages). Sous 900 px, il devient
+  une barre d'onglets en bas : Semaine, Salles, Devoirs, et « Plus » pour le
+  reste.
+- **Deux affichages**, réglables dans l'en-tête ou les paramètres, tous deux
+  avec un jour par colonne :
+  - *grille horaire* — échelle 8 h – 20 h à 56 px par heure, blocs
+    proportionnels à la durée, couloirs quand deux créneaux se chevauchent,
+    repère de l'heure courante ;
+  - *liste par jour* — les cours à la suite, horaires écrits sur chaque carte,
+    « 1h30 de vide » entre deux cours.
+- **Mobile** : la semaine se lit un jour à la fois (matin, puis après-midi) et
+  se feuillette au doigt. La page suit le doigt au pixel près, résiste aux deux
+  bouts de la semaine et part vers le jour que le geste visait. Le sélecteur
+  Lun–Ven au-dessus fait la même chose, en un toucher.
 - **Navigation** par semaine (flèches, `←` / `→` au clavier), bouton
   *Aujourd'hui*, semaine courante déduite des périodes publiées.
 - **Ce qui a changé** : la semaine affichée est comparée à la version vue la
@@ -72,7 +78,7 @@ VITE_API_URL=https://edt.exemple.fr npm run build
   ses cours manquerait à l'appel ; les écritures qu'elle ne nomme pas encore
   apparaissent telles quelles dans le sélecteur.
 - **Comparer** (`#comparer`) : deux classes côte à côte, colonne contre
-  colonne, sur la même échelle horaire. Chaque côté se choisit librement — son
+  colonne, un jour à la fois, sur la même échelle horaire. Chaque côté se choisit librement — son
   année et son groupe —, donc un BUT 1 se compare à un BUT 2 ; chacun est lu
   séparément, une semaine non publiée d'un côté ne prive pas de l'autre. Les
   cours que les deux suivent ensemble (même créneau, même ressource) sont
@@ -85,22 +91,22 @@ VITE_API_URL=https://edt.exemple.fr npm run build
   renvoie d'un geste vers le bas ; à la souris elle se pose au centre.
 - **Export .ics** de la semaine affichée, et **PWA installable** qui garde les
   dernières semaines consultées hors connexion.
-- Habillage sombre à accent rouge, dans l'esprit de
-  [timetable.unilim.vexcited.com](https://timetable.unilim.vexcited.com/) :
-  bandeau d'accueil, cartes arrondies, pastilles de type et de salle, trous de
-  l'emploi du temps annoncés (« 1h30 de vide »). Thème clair également
-  disponible. La pastille de salle porte le rouge de l'application, celle du
-  type garde la couleur de sa nature (CM, TD, TP, SAÉ, contrôle).
+- Habillage sombre à accent rouge (refonte « Proposition 1 ») : polices
+  Bricolage Grotesque (titres) et Instrument Sans (texte), embarquées avec
+  l'application ; cartes et tags aux couleurs de la nature du cours (SAÉ vert,
+  CM jaune, TD orange, TP bleu, contrôle neutre), toujours accompagnées de leur
+  libellé. Thème clair également disponible, et couleur d'accent libre.
 
 ## Organisation
 
 | Fichier | Rôle |
 | --- | --- |
-| `src/App.tsx` | assemblage : en-tête, navigation, chargements, états vides |
+| `src/App.tsx` | assemblage : coquille, page Semaine, chargements, états vides |
+| `src/components/Shell.tsx` | le menu (`.rail`), l'en-tête de page, l'état vide, le pied |
 | `src/lib/api.ts` | appels à l'API, types, mémorisation des réponses |
 | `src/lib/time.ts` | dates, horaires, horloge partagée, semaine courante |
 | `src/lib/groups.ts` | groupes et jours relevés dans l'emploi du temps |
-| `src/lib/layout.ts` | amplitude de la grille, placement en couloirs |
+| `src/lib/layout.ts` | échelle de la grille (56 px/h), placement en couloirs |
 | `src/lib/ics.ts` | export iCalendar |
 | `src/lib/settings.ts` | réglages persistés et thème |
 | `src/lib/motion.ts` | ressorts, projection de l'élan, résistance aux bords |
@@ -118,21 +124,29 @@ VITE_API_URL=https://edt.exemple.fr npm run build
 | `src/components/HomeworkSheet.tsx` | le formulaire d'un devoir |
 | `src/components/CompareGrid.tsx` | les deux emplois du temps, colonne contre colonne |
 | `src/components/CourseBlock.tsx` | une case de cours, repliée ou agrandie |
-| `src/lib/ui.ts` | les classes Tailwind des éléments répétés : boutons, puces, cartes, champs |
-| `src/app.css` | jetons, thèmes, base, et les quelques utilitaires calculés sur des variables |
+| `src/lib/ui.ts` | les classes des éléments répétés (`.btn`, `.opt`, `.seg`, tags par nature) |
+| `src/styles/tokens.css` | **toutes** les couleurs et polices, thème sombre et clair |
+| `src/styles/components.css` | les composants partagés de la refonte, sans couleur en dur |
+| `src/styles/screens.css` | les styles propres à un écran, préfixés par écran |
+| `src/app.css` | pont vers Tailwind, états (survol, focus…), responsive, utilitaires |
 | `public/sw.js` | service worker (coquille + données hors ligne) |
 
 ## Style
 
-Le style s'écrit en classes Tailwind, dans le JSX. Les éléments qui reviennent
-d'une page à l'autre (boutons, puces, pastilles, cartes, champs) ont leurs
-classes rassemblées dans `src/lib/ui.ts`. `src/app.css` ne garde que les jetons
-du bloc `@theme` (couleurs, rayons, ombres, espacements `edge`/`gap`/`overlap`),
-les thèmes clair et sombre — un simple jeu de jetons réécrits —, la base, et
-quelques `@utility` pour ce que les classes ne savent pas dire : la zone qui
-défile (`timetable`) et ses en-têtes collants (`sticky-head`), les filets
-horaires, le dégradé du bandeau, la teinte d'un créneau selon sa nature. Aucune
-couleur n'est écrite ailleurs que dans les jetons.
+Le design vient de la refonte « Proposition 1 » (maquettes HTML et
+documentation livrées à part). Ses deux feuilles sont reprises telles quelles :
+`src/styles/tokens.css`, seule source des couleurs et des polices, et
+`src/styles/components.css`, les composants partagés (`.rail`, `.btn`, `.seg`,
+`.opt`, `.tag`, `.card`, `.blk`, `.sched`…). Les styles propres à un écran sont
+dans `src/styles/screens.css`, préfixés par écran (`.week-crs`, `.rooms-rm`,
+`.ana-cf`…).
+
+`src/app.css` fait le pont avec Tailwind : les jetons `--color-*` y relisent les
+`--edt-*` (aucune valeur n'y est écrite), si bien que `bg-surface` ou
+`text-muted` suivent le thème. Le thème se pose sur `<html data-theme>`, la
+couleur d'accent choisie s'écrit sur `<html>` avec ses dérivés, et l'encre posée
+dessus est celle des deux (sombre ou blanche) qui contraste le plus. Tailwind
+ne sert plus qu'à la mise en page autour des composants.
 
 Le mouvement ne passe pas par des animations CSS dès qu'un doigt peut s'en
 saisir : un `@keyframes` a une durée écrite d'avance et ne se rattrape pas en

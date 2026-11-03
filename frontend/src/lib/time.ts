@@ -56,6 +56,22 @@ export function longDate(iso: string): string {
   return LONG.format(parseDate(iso));
 }
 
+/** `LUNDI` → `Lundi`. */
+export function dayName(name: string): string {
+  return name.charAt(0) + name.slice(1).toLowerCase();
+}
+
+/** `LUNDI` → `Lun`. */
+export function dayShort(name: string): string {
+  return dayName(name).slice(0, 3);
+}
+
+/** `19/10` */
+export function dayStamp(iso: string): string {
+  const date = parseDate(iso);
+  return `${`${date.getDate()}`.padStart(2, '0')}/${`${date.getMonth() + 1}`.padStart(2, '0')}`;
+}
+
 /** `14 – 19 sept.` */
 export function periodLabel(week: Week): string {
   return `${SHORT.format(parseDate(week.period.start))} – ${SHORT.format(parseDate(week.period.end))}`;
@@ -159,7 +175,7 @@ export async function resolveShownWeek(
 export function humanDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  if (hours === 0) return `${rest}min`;
+  if (hours === 0) return `${rest} min`;
   return rest === 0 ? `${hours}h` : `${hours}h${`${rest}`.padStart(2, '0')}`;
 }
 

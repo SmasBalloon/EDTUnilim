@@ -36,6 +36,13 @@ export const Sheet: Component<Props> = (props) => {
 
   let panel: HTMLDivElement | undefined;
   let backdrop: HTMLDivElement | undefined;
+  /** Ce qui avait le focus avant l'ouverture : il le retrouve à la fermeture. */
+  let opener: HTMLElement | null = null;
+
+  const focusable = () =>
+    [...(panel?.querySelectorAll<HTMLElement>(
+      'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ) ?? [])].filter((element) => element.offsetParent !== null);
 
   /** Hauteur du panneau, relevée au début du geste. */
   let height = 0;
@@ -78,6 +85,7 @@ export const Sheet: Component<Props> = (props) => {
   createEffect(() => {
     if (props.open) {
       settled = null;
+      if (!visible()) opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setVisible(true);
       // Le panneau n'existe qu'après le rendu : on le pose dehors, puis on
       // l'amène. Sans ce premier passage, la feuille apparaîtrait en place.
@@ -85,9 +93,21 @@ export const Sheet: Component<Props> = (props) => {
         height = panel?.offsetHeight ?? 0;
         spring.set(0);
         spring.to(1, { damping: 0.85, response: 0.35 });
+        // Le focus entre dans la boîte : le premier champ, sinon le panneau.
+        const first = focusable().find((element) => !element.matches('[aria-label="Fermer"]'));
+        (first ?? panel)?.focus({ preventScroll: true });
       });
     } else if (visible()) {
       retract(() => setVisible(false));
+    }
+  });
+
+  // Fermée, la feuille rend le focus au bouton qui l'avait ouverte.
+  createEffect(() => {
+    if (!visible() && opener) {
+      const back = opener;
+      opener = null;
+      if (back.isConnected) back.focus({ preventScroll: true });
     }
   });
 
@@ -95,6 +115,22 @@ export const Sheet: Component<Props> = (props) => {
   // cherche en premier quand une boîte s'ouvre par erreur.
   onMount(() => {
     const onKey = (event: KeyboardEvent) => {
+      // Le focus reste dans la boîte tant qu'elle est ouverte.
+      if (event.key === 'Tab' && props.open && panel) {
+        const items = focusable();
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (!first || !last) {
+          event.preventDefault();
+          panel.focus();
+        } else if (event.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
       if (event.key === 'Escape' && props.open) {
         retract(() => {
           setVisible(false);
@@ -184,8 +220,8 @@ export const Sheet: Component<Props> = (props) => {
         */}
       <div
         class={cx(
-          'fixed inset-0 z-50 flex items-end justify-center [--presence:0] sm:items-center',
-          'bg-[rgb(0_0_0/calc(0.5*var(--presence)))] backdrop-blur-[calc(var(--presence)*12px)]',
+          'fixed inset-0 z-50 flex items-end justify-center [--presence:0] sm:items-center sm:p-6',
+          'bg-[color-mix(in_srgb,var(--edt-scrim)_calc(var(--presence)*100%),transparent)]',
         )}
         ref={backdrop}
         onClick={() => retract(() => { setVisible(false); props.onClose(); })}
@@ -198,15 +234,15 @@ export const Sheet: Component<Props> = (props) => {
           */}
         <div
           class={cx(
-            'max-h-[85dvh] w-full overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]',
-            'rounded-t-sheet border border-line border-t-edge shadow-pop sm:max-w-lg sm:rounded-sheet',
-            'bg-surface/88 backdrop-blur-(--material-blur) backdrop-saturate-180',
-            'reduce-transparency:bg-surface reduce-transparency:backdrop-filter-none',
+            'max-h-[88dvh] w-full overflow-y-auto overscroll-contain bg-surface text-text outline-none',
+            'px-5 pt-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-8 sm:py-7',
+            'rounded-t-sheet border border-line shadow-pop sm:max-w-[600px] sm:rounded-sheet',
             // Le geste vertical appartient à la feuille tant qu'elle est en haut.
             'touch-pan-y will-change-transform',
             props.class,
           )}
           ref={panel}
+          tabIndex={-1}
           role="dialog"
           aria-modal="true"
           aria-label={props.label}
@@ -219,7 +255,7 @@ export const Sheet: Component<Props> = (props) => {
           {/* La poignée : elle dit que la feuille se prend et se tire. */}
           <Show when={bottom()}>
             <div class="-mt-2.5 mb-3 flex cursor-grab justify-center p-1.5" aria-hidden="true">
-              <span class="h-[0.3125rem] w-9 rounded-full bg-muted/45" />
+              <span class="h-[5px] w-9 rounded-full bg-muted/45" />
             </div>
           </Show>
           {props.children}
@@ -231,10 +267,10 @@ export const Sheet: Component<Props> = (props) => {
 
 /** Le titre d'une feuille, et de quoi la fermer. */
 export const SheetHeader: Component<{ title: string; onClose: () => void }> = (props) => (
-  <header class="mb-5 flex items-center justify-between">
-    <h2 class="text-lg font-semibold">{props.title}</h2>
-    <button type="button" class={button.plain} onClick={props.onClose} aria-label="Fermer">
-      <X size={16} aria-hidden="true" />
+  <header class="mb-5 flex items-center justify-between gap-4">
+    <h2 class="font-display text-[26px] font-semibold leading-tight">{props.title}</h2>
+    <button type="button" class={button.icon} onClick={props.onClose} aria-label="Fermer">
+      <X size={20} aria-hidden="true" />
     </button>
   </header>
 );

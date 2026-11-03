@@ -1,6 +1,8 @@
 import {
   For,
+  Match,
   Show,
+  Switch,
   createEffect,
   createMemo,
   createResource,
@@ -8,22 +10,8 @@ import {
   on,
   onCleanup,
   onMount,
-  type Component,
-  type JSX,
 } from 'solid-js';
-import {
-  CalendarDays,
-  Columns2,
-  DoorOpen,
-  Download,
-  GraduationCap,
-  LayoutGrid,
-  ListChecks,
-  List,
-  ScanSearch,
-  Settings,
-  UserRound,
-} from 'lucide-solid';
+import { Download } from 'lucide-solid';
 
 import { ApiError, clearCache, fetchWeek, fetchYears, type Course } from './lib/api';
 import { diff, recall, remember, slotKey, weekKey, type Change } from './lib/changes';
@@ -32,16 +20,16 @@ import { groupBases, groupLabel, weekDays } from './lib/groups';
 import { downloadIcs } from './lib/ics';
 import { clock, greeting, periodLabel, resolveShownWeek } from './lib/time';
 import { settings, update, type ViewMode } from './lib/settings';
-import { centered, cx, note, press, summary as headCards } from './lib/ui';
+import { button, segment } from './lib/ui';
 import { AccountPage } from './components/AccountPage';
 import { AnalysisPage } from './components/AnalysisPage';
 import { PdfsPage } from './components/PdfsPage';
 import { ChangesBar } from './components/ChangesBar';
 import { ComparePage } from './components/ComparePage';
 import { CourseModal } from './components/CourseModal';
-import { Footer } from './components/Footer';
 import { HomeworkSheet } from './components/HomeworkSheet';
 import { RoomsPage } from './components/RoomsPage';
+import { Empty, Foot, PageHead, Rail, type Page } from './components/Shell';
 import { TeachersPage } from './components/TeachersPage';
 import { TodoPage } from './components/TodoPage';
 import { SettingsSheet } from './components/SettingsSheet';
@@ -49,19 +37,6 @@ import { Setup } from './components/Setup';
 import { StatusCard } from './components/StatusCard';
 import { WeekBar } from './components/WeekBar';
 import { WeekView } from './components/WeekView';
-
-type Page = 'timetable' | 'compare' | 'teachers' | 'rooms' | 'analysis' | 'todo' | 'account' | 'pdfs';
-
-const HASHES: Record<Page, string> = {
-  timetable: '',
-  compare: 'comparer',
-  teachers: 'enseignants',
-  rooms: 'salles',
-  analysis: 'analyse',
-  todo: 'devoirs',
-  account: 'compte',
-  pdfs: 'pdf',
-};
 
 /**
  * La page suit l'ancre de l'URL : `#salles` se partage et revient avec
@@ -77,95 +52,22 @@ function pageFromHash(): Page {
   return location.hash.startsWith('#compte') ? 'account' : 'timetable';
 }
 
-const TITLES: Record<Exclude<Page, 'timetable'>, [string, string]> = {
-  compare: ['Comparer', 'Deux classes côte à côte, heure par heure.'],
-  teachers: ['Enseignants', 'La semaine d\u2019un enseignant, les trois années réunies.'],
-  rooms: ['Salles', 'Libres ou occupées, maintenant ou à l’heure choisie.'],
-  analysis: ['Analyse', 'Les salles réservées deux fois dans les PDF que tu déposes.'],
-  todo: ['Devoirs', 'Ce qu’il y a à faire, pour toi ou pour ta classe.'],
-  account: ['Compte', 'Ta classe et tes messages privés sur Discord.'],
-  pdfs: ['PDF en cache', 'Les emplois du temps gardés par le serveur, et ceux déposés à la main.'],
-};
-
-/**
- * Une commande du bandeau.
- *
- * Toutes ont le même gabarit et la même matière ; seule l'icône change. Le
- * libellé n'est pas affiché mais reste dit, à la souris comme au lecteur
- * d'écran : à cette taille, sept libellés ne tiendraient pas sur une ligne.
- *
- * Posée sur le rouge, c'est une matière claire sur une matière plus lourde —
- * jamais l'inverse, la lisibilité s'y perdrait. Dans un bloc, elle ne porte
- * plus son propre fond : c'est le bloc qui le donne, et seule celle qui est
- * active s'en détache.
- */
-const Action: Component<{
-  label: string;
-  /** Rangée dans un bloc de commandes (`group`). */
-  grouped?: boolean;
-  /** Page en cours : « vous êtes ici », pour qui écoute la page. */
-  current?: boolean;
-  /** Choix retenu, pour une commande à deux états. */
-  pressed?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  children: JSX.Element;
-}> = (props) => (
-  <button
-    type="button"
-    class={cx(
-      press,
-      'inline-flex min-h-9 min-w-9 items-center justify-center rounded-control border px-2.5 font-semibold text-on-accent',
-      'cursor-pointer disabled:cursor-default disabled:opacity-40 pointer-coarse:min-h-10',
-      // Sur téléphone, chaque pixel compte entre le salut et les commandes.
-      'max-[34rem]:min-w-8 max-[34rem]:px-1.5',
-      props.grouped
-        ? 'border-transparent hover:not-disabled:bg-white/20'
-        : 'border-white/22 bg-white/16 backdrop-blur-md hover:not-disabled:bg-white/30 reduce-transparency:backdrop-filter-none',
-      // La page qu'on regarde, ou l'affichage choisi.
-      'aria-[current=page]:bg-on-accent aria-[current=page]:text-accent aria-pressed:bg-on-accent aria-pressed:text-accent',
-    )}
-    title={props.label}
-    aria-label={props.label}
-    aria-current={props.current ? 'page' : undefined}
-    aria-pressed={props.pressed}
-    disabled={props.disabled}
-    onClick={props.onClick}
-  >
-    {props.children}
-  </button>
-);
-
-/** Les pages, dans l'ordre où elles se suivent dans le bandeau. */
-const NAV: { page: Page; label: string; icon: () => JSX.Element }[] = [
-  { page: 'timetable', label: 'Emploi du temps', icon: () => <CalendarDays size={16} aria-hidden="true" /> },
-  { page: 'compare', label: 'Comparer deux classes', icon: () => <Columns2 size={16} aria-hidden="true" /> },
-  { page: 'teachers', label: 'Emploi du temps d’un enseignant', icon: () => <GraduationCap size={16} aria-hidden="true" /> },
-  { page: 'rooms', label: 'Salles libres', icon: () => <DoorOpen size={16} aria-hidden="true" /> },
-  { page: 'analysis', label: 'Analyser des PDF', icon: () => <ScanSearch size={16} aria-hidden="true" /> },
-  { page: 'todo', label: 'Devoirs à faire', icon: () => <ListChecks size={16} aria-hidden="true" /> },
-  { page: 'account', label: 'Compte Discord', icon: () => <UserRound size={16} aria-hidden="true" /> },
+/** Les deux façons de lire la semaine. */
+const VIEWS: { value: ViewMode; label: string }[] = [
+  { value: 'grid', label: 'Grille' },
+  { value: 'list', label: 'Liste' },
 ];
 
-/*
- * Les commandes se lisent en blocs : l'affichage de la semaine, les pages,
- * puis les réglages. Ce qui va ensemble tient dans la même matière claire, ce
- * qui est isolé flotte seul.
- */
-const group =
-  'flex items-center gap-0.5 rounded-[calc(var(--radius-control)+0.1875rem)] bg-white/14 p-[0.1875rem] backdrop-blur-md max-[34rem]:gap-0 max-[34rem]:p-0.5';
-
-/** Les deux façons de lire la semaine. */
-const VIEWS: { value: ViewMode; label: string; icon: () => JSX.Element }[] = [
-  { value: 'grid', label: 'Grille horaire', icon: () => <LayoutGrid size={16} aria-hidden="true" /> },
-  { value: 'list', label: 'Liste par jour', icon: () => <List size={16} aria-hidden="true" /> },
+/** Les quatre natures de la légende, dans l'ordre de la maquette. */
+const LEGEND: [string, string][] = [
+  ['t-sae', 'SAÉ'],
+  ['t-cm', 'CM'],
+  ['t-td', 'TD'],
+  ['t-tp', 'TP'],
 ];
 
 export function App() {
   const [page, setPage] = createSignal<Page>(pageFromHash());
-  const goTo = (next: Page) => {
-    location.hash = HASHES[next];
-  };
   const [years, { refetch: refetchYears }] = createResource(fetchYears);
   const [week, setWeek] = createSignal<number | null>(null);
   const [selected, setSelected] = createSignal<Course | null>(null);
@@ -319,6 +221,7 @@ export function App() {
     const onHash = () => {
       setPage(pageFromHash());
       setSelected(null);
+      window.scrollTo({ top: 0 });
     };
     window.addEventListener('hashchange', onHash);
     onCleanup(() => window.removeEventListener('hashchange', onHash));
@@ -326,13 +229,11 @@ export function App() {
 
   onMount(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setSelected(null);
-        setShowSettings(false);
-      }
-      // Les flèches changent de semaine, sur l'emploi du temps comme sur la
-      // comparaison : les deux pages en affichent une.
-      if (page() === 'rooms' || page() === 'analysis' || page() === 'account' || page() === 'pdfs') return;
+      // Les flèches changent de semaine, sur les pages qui en affichent une ;
+      // jamais pendant une saisie ni sous une boîte de dialogue.
+      if (page() !== 'timetable' && page() !== 'compare' && page() !== 'teachers') return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, select, textarea, [role="dialog"], [role="tablist"]')) return;
       if (event.key === 'ArrowLeft') step(-1);
       if (event.key === 'ArrowRight') step(1);
     };
@@ -341,19 +242,23 @@ export function App() {
   });
 
   const error = () => data.error as unknown;
+  const weekRoute = () => ({ week: week(), current: currentWeek(), onWeek: (next: number) => {
+    setWeek(next);
+    setSelected(null);
+  } });
 
   return (
     <Show
       when={years()}
       fallback={
-        <main class="grid min-h-dvh place-items-center p-5">
+        <div class="grid min-h-dvh place-items-center p-5">
           <Show
             when={!years.error}
-            fallback={<p class={note}>Service injoignable. Réessaie plus tard.</p>}
+            fallback={<Empty title="Service injoignable">Réessaie plus tard.</Empty>}
           >
-            <p class={note}>Chargement…</p>
+            <Empty>Chargement…</Empty>
           </Show>
-        </main>
+        </div>
       }
     >
       {(loaded) => (
@@ -361,206 +266,141 @@ export function App() {
           when={page() !== 'timetable' || (settings().year !== null && settings().group !== null)}
           fallback={<Setup years={loaded()} />}
         >
-          <div class="flex h-dvh flex-col overflow-x-hidden">
-            {/* Bandeau : qui on est, et les actions de l'application. Il laisse
-                dépasser les cartes de tête sur sa hauteur, et se pose sur le
-                contenu par une ombre, sans filet tranchant. */}
-            <header
-              class={cx(
-                'bg-banner flex shrink-0 items-center gap-3 px-edge text-on-accent',
-                'pt-[max(clamp(0.625rem,2.5vw,1rem),env(safe-area-inset-top))] pb-[calc(var(--spacing-overlap)+clamp(0.625rem,2vw,1rem))]',
-                'shadow-[0_10px_30px_-22px_rgb(0_0_0/0.8)]',
-              )}
-            >
-              {/* Le salut cède la place aux commandes plutôt que de les pousser dehors. */}
-              <div class="min-w-0">
-                <h1 class="truncate text-[clamp(1.125rem,4.5vw,1.375rem)] font-semibold">
-                  {page() === 'timetable' ? greeting(clock()) : TITLES[page() as 'rooms'][0]}
-                </h1>
-                {/* Sur une surface colorée, un gris pâle disparaît : le
-                    sous-titre garde du contraste plutôt que de s'effacer. */}
-                <p class="mt-0.5 truncate text-[0.8125rem] tracking-[0.01em] text-white/88">
-                  {page() === 'timetable'
-                    ? `Vous êtes en ${groupLabel(settings().group ?? '')}.`
-                    : TITLES[page() as 'rooms'][1]}
-                </p>
-              </div>
+          <div class="app">
+            <Rail page={page()} onSettings={() => setShowSettings(true)} />
 
-              <div class="ml-auto flex shrink-0 items-center gap-1.5 max-[34rem]:gap-1">
-                {/* L'affichage de la semaine : deux états d'une même chose,
-                    donc un sélecteur — et il ne paraît que là où il agit. Sur
-                    téléphone, il s'efface : il reste à portée dans les réglages. */}
-                <Show when={page() === 'timetable' || page() === 'teachers'}>
-                  <div class={`${group} max-[34rem]:hidden`} role="group" aria-label="Affichage de la semaine">
-                    <For each={VIEWS}>
-                      {(item) => (
-                        <Action
-                          label={item.label}
-                          grouped
-                          pressed={settings().view === item.value}
-                          onClick={() => update({ view: item.value })}
-                        >
-                          {item.icon()}
-                        </Action>
-                      )}
-                    </For>
-                  </div>
-                </Show>
-
-                <Show when={page() === 'timetable'}>
-                  <Action
-                    label="Exporter la semaine (.ics)"
-                    disabled={!data()}
-                    onClick={() => {
-                      const loadedWeek = data();
-                      if (loadedWeek) {
-                        downloadIcs(loadedWeek.filtered, loadedWeek.filtered.courses, settings().group);
-                      }
-                    }}
-                  >
-                    <Download size={16} aria-hidden="true" />
-                  </Action>
-                </Show>
-
-                {/* Les pages sont toutes là, toujours dans le même ordre, et
-                    celle qu'on regarde est marquée : on sait où l'on est et
-                    ce qu'il y a à côté, sans que le bandeau se réarrange. */}
-                <nav class={group} aria-label="Pages">
-                  <For each={NAV}>
-                    {(item) => (
-                      <Action
-                        label={item.label}
-                        grouped
-                        current={page() === item.page}
-                        onClick={() => goTo(item.page)}
-                      >
-                        {item.icon()}
-                      </Action>
-                    )}
-                  </For>
-                </nav>
-
-                <Action label="Réglages" onClick={() => setShowSettings(true)}>
-                  <Settings size={16} aria-hidden="true" />
-                </Action>
-              </div>
-            </header>
-
-            <Show
-              when={page() === 'timetable'}
-              fallback={
-                page() === 'rooms' ? (
+            <main class="main" id="contenu">
+              <Switch>
+                <Match when={page() === 'rooms'}>
                   <RoomsPage years={loaded()} onSelect={setSelected} />
-                ) : page() === 'analysis' ? (
+                </Match>
+                <Match when={page() === 'analysis'}>
                   <AnalysisPage />
-                ) : page() === 'pdfs' ? (
+                </Match>
+                <Match when={page() === 'pdfs'}>
                   <PdfsPage />
-                ) : page() === 'todo' ? (
+                </Match>
+                <Match when={page() === 'todo'}>
                   <TodoPage />
-                ) : page() === 'teachers' ? (
-                  <TeachersPage
-                    years={loaded()}
-                    week={week()}
-                    current={currentWeek()}
-                    onWeek={(next) => {
-                      setWeek(next);
-                      setSelected(null);
-                    }}
-                    onSelect={setSelected}
-                  />
-                ) : page() === 'compare' ? (
-                  <ComparePage
-                    years={loaded()}
-                    week={week()}
-                    current={currentWeek()}
-                    onWeek={(next) => {
-                      setWeek(next);
-                      setSelected(null);
-                    }}
-                    onSelect={setSelected}
-                  />
-                ) : (
+                </Match>
+                <Match when={page() === 'account'}>
                   <AccountPage years={loaded()} />
-                )
-              }
-            >
-              {/* Les deux cartes de tête chevauchent le bas du bandeau. */}
-              <div class={headCards}>
-                <Show when={todayWeek()} fallback={<div />}>
-                  {(current) => <StatusCard courses={current().courses} />}
-                </Show>
-
-                <WeekBar
-                  week={week()}
-                  weeks={weeks()}
-                  current={currentWeek()}
-                  period={period()}
-                  workload={workload()}
-                  onWeek={(next) => {
-                    setWeek(next);
-                    setSelected(null);
-                  }}
-                />
-              </div>
-
-              <Show when={changes().length > 0}>
-                <ChangesBar changes={changes()} onSeen={markSeen} />
-              </Show>
-
-              <main class="timetable">
-                <Show
-                  when={data()}
-                  fallback={
-                    <div class={centered}>
-                      <Show when={error()} fallback={<p>Chargement de la semaine…</p>}>
-                        <p>
-                          {error() instanceof ApiError && (error() as ApiError).isMissing
-                            ? `Aucun emploi du temps publié pour la semaine ${week()}.`
-                            : `Emploi du temps indisponible : ${(error() as Error).message}`}
-                        </p>
-                      </Show>
+                </Match>
+                <Match when={page() === 'teachers'}>
+                  <TeachersPage years={loaded()} {...weekRoute()} onSelect={setSelected} />
+                </Match>
+                <Match when={page() === 'compare'}>
+                  <ComparePage years={loaded()} {...weekRoute()} onSelect={setSelected} />
+                </Match>
+                <Match when={page() === 'timetable'}>
+                  <PageHead
+                    title={greeting(clock())}
+                    sub={`Vous êtes en ${groupLabel(settings().group ?? '')} · BUT ${settings().year ?? ''}`}
+                  >
+                    <div class={segment} role="group" aria-label="Affichage de la semaine">
+                      <For each={VIEWS}>
+                        {(item) => (
+                          <button
+                            type="button"
+                            aria-pressed={settings().view === item.value}
+                            onClick={() => update({ view: item.value })}
+                          >
+                            {item.label}
+                          </button>
+                        )}
+                      </For>
                     </div>
-                  }
-                >
-                  {(loadedWeek) => (
-                    <Show
-                      when={loadedWeek().filtered.courses.length > 0}
-                      fallback={
-                        <div class={centered}>
-                          <p>{`Aucun cours pour ${groupLabel(settings().group ?? '')} cette semaine.`}</p>
-                        </div>
-                      }
+                    <button
+                      type="button"
+                      class={button.plain}
+                      disabled={!data()}
+                      title="Exporter la semaine (.ics)"
+                      onClick={() => {
+                        const loadedWeek = data();
+                        if (loadedWeek) {
+                          downloadIcs(loadedWeek.filtered, loadedWeek.filtered.courses, settings().group);
+                        }
+                      }}
                     >
-                      <WeekView
-                        week={loadedWeek().filtered}
-                        days={weekDays(loadedWeek().structure)}
-                        view={settings().view}
-                        changed={(course) => marks().get(slotKey(course))}
-                        onSelect={setSelected}
-                      />
-                    </Show>
-                  )}
-                </Show>
-              </main>
+                      <Download size={20} aria-hidden="true" />
+                      <span class="max-[520px]:sr-only">Exporter .ics</span>
+                    </button>
+                    <WeekBar
+                      week={week()}
+                      weeks={weeks()}
+                      current={currentWeek()}
+                      period={period()}
+                      workload={workload()}
+                      onWeek={weekRoute().onWeek}
+                    />
+                  </PageHead>
 
-              <Footer>
-                <Show when={data()}>
-                  {(loadedWeek) => (
-                    <>
-                      <span>{`${loadedWeek().filtered.count} cours · lus dans le PDF du département`}</span>
-                      <a
-                        class="ml-auto whitespace-nowrap underline"
-                        href={loadedWeek().filtered.source.url}
-                        target="_blank"
-                        rel="noreferrer"
+                  <Show when={changes().length > 0}>
+                    <ChangesBar changes={changes()} onSeen={markSeen} />
+                  </Show>
+
+                  <div class="row items-stretch">
+                    <Show when={todayWeek()}>{(current) => <StatusCard courses={current().courses} />}</Show>
+                    <Show when={data()}>
+                      {(loadedWeek) => (
+                        <div class="card week-strip flex-[2_1_420px]">
+                          <b>{`${loadedWeek().filtered.count} cours cette semaine`}</b>
+                          <span class="row gap-2">
+                            <For each={LEGEND}>{([tone, name]) => <span class={`tag ${tone}`}>{name}</span>}</For>
+                          </span>
+                          <span class="src max-[640px]:hidden">Lus dans le PDF du département</span>
+                        </div>
+                      )}
+                    </Show>
+                  </div>
+
+                  <Show
+                    when={data()}
+                    fallback={
+                      <Show when={error()} fallback={<Empty>Chargement de la semaine…</Empty>}>
+                        {error() instanceof ApiError && (error() as ApiError).isMissing ? (
+                          <Empty title="Semaine non publiée">
+                            {`Aucun emploi du temps publié pour la semaine ${week()}.`}
+                          </Empty>
+                        ) : (
+                          <Empty title="Emploi du temps indisponible">{(error() as Error).message}</Empty>
+                        )}
+                      </Show>
+                    }
+                  >
+                    {(loadedWeek) => (
+                      <Show
+                        when={loadedWeek().filtered.courses.length > 0}
+                        fallback={
+                          <Empty title="Aucun cours">
+                            {`Rien pour ${groupLabel(settings().group ?? '')} cette semaine.`}
+                          </Empty>
+                        }
                       >
-                        PDF d'origine
-                      </a>
-                    </>
-                  )}
-                </Show>
-              </Footer>
-            </Show>
+                        <WeekView
+                          week={loadedWeek().filtered}
+                          days={weekDays(loadedWeek().structure)}
+                          view={settings().view}
+                          changed={(course) => marks().get(slotKey(course))}
+                          onSelect={setSelected}
+                        />
+                      </Show>
+                    )}
+                  </Show>
+
+                  <Show when={data()}>
+                    {(loadedWeek) => (
+                      <Foot>
+                        <span>{`${loadedWeek().filtered.count} cours · lus dans le PDF du département`}</span>
+                        <a class="lnk" href={loadedWeek().filtered.source.url} target="_blank" rel="noreferrer">
+                          PDF d'origine
+                        </a>
+                      </Foot>
+                    )}
+                  </Show>
+                </Match>
+              </Switch>
+            </main>
 
             <CourseModal
               course={selected()}

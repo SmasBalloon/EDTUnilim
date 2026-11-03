@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Réglages</title>
+<meta name="theme-color" content="#FF5252">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;600;700&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../css/tokens.css">
+<link rel="stylesheet" href="../css/components.css">
+<style>body{margin:0}.vw{padding:16px 18px;border-radius:14px;border:1px solid var(--ln);background:var(--s2);display:flex;flex-direction:column;gap:4px;text-align:left;color:var(--tx);font-family:'Instrument Sans',sans-serif;cursor:pointer}.vw.on{border-color:var(--ac);background:var(--acs)}.vw b{font-size:15px}.vw span{color:var(--mu);font-size:13px}.sec{display:flex;flex-direction:column;gap:10px}</style>
+</head>
+<body>
+<div class="app" style="position: relative; display: block; width: 1440px; height: 900px; min-height: 900px; overflow: hidden">
+<div style="position: absolute; inset: 0; padding: 40px 56px; opacity: .35">
+<h1 style="font: 600 36px 'Bricolage Grotesque', sans-serif">Bonsoir</h1>
+<div style="margin-top: 32px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px"><div class="card" style="height: 520px"></div><div class="card" style="height: 520px"></div><div class="card" style="height: 520px"></div><div class="card" style="height: 520px"></div><div class="card" style="height: 360px"></div></div>
+</div>
+<div style="position: absolute; inset: 0; background: var(--edt-scrim)"></div>
+<div role="dialog" aria-label="Réglages" class="card" style="position: absolute; left: 50%; top: 24px; transform: translateX(-50%); width: 600px; height: 852px; padding: 28px 32px; display: flex; flex-direction: column; gap: 22px; overflow: hidden; background: var(--s1)">
+<div class="row" style="justify-content: space-between"><h2 style="font: 600 26px 'Bricolage Grotesque', sans-serif">Réglages</h2><button class="btn icon" aria-label="Fermer"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+<div class="sec"><span class="lbl">Affichage de la semaine</span>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px"><button class="vw"><b>Grille horaire</b><span>Les cours posés sur une échelle 8 h – 19 h 30</span></button><button class="vw on"><b>Liste par jour</b><span>Les cours à la suite, avec leurs horaires écrits</span></button></div></div>
+<div class="sec"><span class="lbl">Apparence</span><div class="seg" style="align-self: flex-start"><button>Système</button><button>Clair</button><button class="on">Sombre</button></div></div>
+<div class="sec"><span class="lbl">Couleur</span><div class="row"><span style="width: 44px; height: 44px; border-radius: 50%; background: var(--edt-accent); display: inline-block"></span><span class="field" style="font-family: ui-monospace, monospace">#FF5252</span><button class="btn">Rouge d'origine</button></div></div>
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px">
+<div class="sec"><span class="lbl">Année</span><div class="row" style="gap: 8px"><button class="opt" style="min-width: 0; padding: 0 14px">1</button><button class="opt" style="min-width: 0; padding: 0 14px">2</button><button class="opt on" style="min-width: 0; padding: 0 14px">3</button></div></div>
+<div class="sec"><span class="lbl">Groupe</span><div class="row" style="gap: 8px"><button class="opt on" style="min-width: 0; padding: 0 14px">G7</button></div></div>
+<div class="sec"><span class="lbl">Sous-groupe</span><div class="row" style="gap: 8px"><button class="opt" style="min-width: 0; padding: 0 14px">A</button><button class="opt on" style="min-width: 0; padding: 0 14px">B</button></div></div>
+</div>
+<div class="sec"><span class="lbl">Calendrier</span>
+<div class="row"><button class="btn pri"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>S'abonner</button><button class="btn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/></svg>Copier l'adresse</button></div>
+<p style="color: var(--mu); font-size: 13px; line-height: 1.5">Les cours de G7B dans ton agenda, mis à jour tout seuls. Pour Google Agenda : copie l'adresse, puis Autres agendas → À partir de l'URL.</p></div>
+</div>
+</div>
+</body>
+</html>

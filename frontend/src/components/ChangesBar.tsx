@@ -6,7 +6,7 @@ import { differences, type Change } from '../lib/changes';
 import { groupLabel } from '../lib/groups';
 import { KIND_LABEL } from '../lib/layout';
 import { humanDuration, longDate } from '../lib/time';
-import { button, cx, kindEdge } from '../lib/ui';
+import { button, cx, kindCard, kindTag } from '../lib/ui';
 import { Sheet, SheetHeader } from './Sheet';
 
 interface Props {
@@ -22,9 +22,9 @@ const TITLES: Record<Change['kind'], string> = {
 };
 
 const TONES: Record<Change['kind'], string> = {
-  added: 'text-kind-sae',
-  removed: 'text-accent',
-  modified: 'text-kind-td',
+  added: 't-sae',
+  removed: 't-room',
+  modified: 't-td',
 };
 
 /** « mardi 15 septembre, 10:00 – 12:00 » */
@@ -32,10 +32,9 @@ function when(course: Course): string {
   return `${longDate(course.date)}, ${course.start} – ${course.end}`;
 }
 
-/** « TD R1.05 · G1A · 208 » */
+/** « R1.05 · G1A · 208 » : la nature est dite par son tag. */
 function what(course: Course): string {
   return [
-    KIND_LABEL[course.kind],
     course.resource?.code ?? course.title,
     course.groups.map(groupLabel).join(', '),
     course.room,
@@ -68,12 +67,9 @@ export const ChangesBar: Component<Props> = (props) => {
 
   return (
     <>
-      <div
-        class="mx-edge mt-gap flex shrink-0 items-center gap-2.5 rounded-card border border-accent/40 bg-accent-wash py-2 pr-2.5 pl-3.5"
-        role="status"
-      >
-        <span class="size-2 shrink-0 rounded-full bg-accent" aria-hidden="true" />
-        <p class="min-w-0 flex-1 text-sm">
+      <div class="card status border-accent-line! bg-accent-soft! py-2.5! pr-2.5!" role="status">
+        <span class="dot bg-accent!" aria-hidden="true" />
+        <p class="min-w-0 flex-1 text-sm font-medium">
           {`Cette semaine a changé depuis ta dernière visite : ${summarise(props.changes)}.`}
         </p>
         <button type="button" class={button.plain} onClick={() => setOpen(true)}>
@@ -81,12 +77,12 @@ export const ChangesBar: Component<Props> = (props) => {
         </button>
         <button
           type="button"
-          class={button.round}
+          class={button.icon}
           onClick={props.onSeen}
           title="Marquer comme vu"
           aria-label="Marquer comme vu"
         >
-          <Check size={16} aria-hidden="true" />
+          <Check size={20} aria-hidden="true" />
         </button>
       </div>
 
@@ -96,25 +92,18 @@ export const ChangesBar: Component<Props> = (props) => {
         <ul class="grid gap-2.5">
           <For each={props.changes}>
             {(change) => (
-              <li
-                class={cx(
-                  `kind-${change.course.kind}`,
-                  'rounded-control border border-line bg-kind-tint px-3 py-2.5',
-                  kindEdge,
-                )}
-              >
-                <p class="flex items-baseline gap-2">
-                  <span class={cx('text-xs font-bold uppercase tracking-[0.04em]', TONES[change.kind])}>
-                    {TITLES[change.kind]}
-                  </span>
+              <li class={cx('rounded-xl border px-3.5 py-3', kindCard(change.course.kind))}>
+                <p class="flex flex-wrap items-center gap-2">
+                  <span class={cx('tag', TONES[change.kind])}>{TITLES[change.kind]}</span>
+                  <span class={kindTag(change.course.kind)}>{KIND_LABEL[change.course.kind]}</span>
                   {/* « mardi 15 septembre » : seule l'initiale se capitalise. */}
-                  <span class="text-[0.8125rem] text-muted tabular-nums first-letter:uppercase">
+                  <span class="text-[13px] text-muted tabular-nums first-letter:uppercase">
                     {when(change.course)}
                   </span>
                 </p>
                 <p
                   class={cx(
-                    'mt-1 font-medium',
+                    'mt-1.5 font-semibold',
                     change.kind === 'removed' && 'line-through decoration-accent/70',
                   )}
                 >
@@ -123,7 +112,7 @@ export const ChangesBar: Component<Props> = (props) => {
 
                 <Show when={change.before}>
                   {(before) => (
-                    <ul class="mt-1 list-disc pl-4 text-[0.8125rem] text-muted">
+                    <ul class="mt-1 list-disc pl-4 text-[13px] text-muted">
                       <For each={differences(before(), change.course)}>
                         {(detail) => <li>{detail}</li>}
                       </For>
@@ -132,7 +121,7 @@ export const ChangesBar: Component<Props> = (props) => {
                 </Show>
 
                 <Show when={change.kind !== 'modified'}>
-                  <p class="mt-1 text-[0.8125rem] text-muted">{humanDuration(change.course.duration_minutes)}</p>
+                  <p class="mt-1 text-[13px] text-muted">{humanDuration(change.course.duration_minutes)}</p>
                 </Show>
               </li>
             )}
@@ -142,7 +131,7 @@ export const ChangesBar: Component<Props> = (props) => {
         <div class="mt-6">
           <button
             type="button"
-            class={`${button.primary} w-full`}
+            class={`${button.primary} wide`}
             onClick={() => {
               props.onSeen();
               setOpen(false);

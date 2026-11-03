@@ -1,0 +1,77 @@
+/* ==========================================================================
+   EDT · IUT info Limoges — design tokens (Proposition 1, thème sombre)
+   Toutes les couleurs du design sont ici. Rien d'autre ne contient de couleur
+   en dur dans components.css : changer une valeur ici change tout le site.
+   ========================================================================== */
+
+:root {
+  /* ---- Fonds & lignes -------------------------------------------------- */
+  --edt-bg:        #0E0F13;   /* fond de page */
+  --edt-surface-1: #15171D;   /* cartes, panneaux */
+  --edt-surface-2: #1C1F27;   /* boutons, éléments actifs du menu */
+  --edt-surface-3: #262A35;   /* segment actif, tags neutres */
+  --edt-line:      #2A2E39;   /* bordures, séparateurs, lignes d'heures */
+
+  /* ---- Texte ----------------------------------------------------------- */
+  --edt-text:      #F3F4F7;   /* texte principal  (contraste 17:1 sur le fond) */
+  --edt-muted:     #A0A7B8;   /* texte secondaire (contraste 8:1  sur le fond) */
+
+  /* ---- Accent (rouge d'origine du site, theme-color #ff4b4b) ------------ */
+  --edt-accent:      #FF5252;                                          /* boutons principaux, icône active */
+  --edt-on-accent:   #1A0708;                                          /* texte posé sur l'accent */
+  --edt-accent-soft: color-mix(in srgb, var(--edt-accent) 14%, transparent); /* fond d'option sélectionnée, tag salle */
+  --edt-accent-text: #FF9A9A;                                          /* texte accent sur fond sombre */
+  --edt-accent-hot:  #FF8A8A;                                          /* « aujourd'hui », « demain à 08:30 » */
+  --edt-accent-ring: rgba(255, 82, 82, .75);                           /* contour « cours suivis ensemble » */
+
+  /* ---- États ----------------------------------------------------------- */
+  --edt-ok:        #6EE7A0;                 /* « libres tous les deux », salle libre */
+  --edt-ok-soft:   rgba(74, 222, 128, .13);
+  --edt-ok-line:   rgba(74, 222, 128, .35);
+
+  /* ---- Types de cours --------------------------------------------------
+     text = couleur du libellé (tag)   bg = fond de la carte
+     line = bordure de la carte        tag = fond du tag                    */
+  --edt-sae-text: #6EE7A0;  --edt-sae-bg: rgba(74, 222, 128, .12);  --edt-sae-line: rgba(74, 222, 128, .35);  --edt-sae-tag: rgba(74, 222, 128, .14);
+  --edt-cm-text:  #FBC94A;  --edt-cm-bg:  rgba(251, 191, 36, .14);  --edt-cm-line:  rgba(251, 191, 36, .45);  --edt-cm-tag:  rgba(251, 191, 36, .16);
+  --edt-td-text:  #FFA366;  --edt-td-bg:  rgba(255, 140, 66, .15);  --edt-td-line:  rgba(255, 140, 66, .48);  --edt-td-tag:  rgba(255, 140, 66, .16);
+  --edt-tp-text:  #8CBBFF;  --edt-tp-bg:  rgba(96, 165, 250, .16);  --edt-tp-line:  rgba(96, 165, 250, .48);  --edt-tp-tag:  rgba(96, 165, 250, .18);
+
+  /* ---- Années (utilisées pour distinguer BUT 1 / 2 / 3 hors types) ------ */
+  --edt-y1-text: #8CBBFF;  --edt-y1-tag: rgba(96, 165, 250, .18);
+  --edt-y2-text: #FBC94A;  --edt-y2-tag: rgba(251, 191, 36, .16);
+  --edt-y3-text: #D2A6FF;  --edt-y3-tag: rgba(192, 132, 252, .18);
+
+  /* ---- Marque externe -------------------------------------------------- */
+  --edt-discord:    #4752C4;     /* bouton « Se connecter avec Discord » (6,4:1 avec du blanc) */
+  --edt-on-discord: #FFFFFF;
+
+  /* ---- Fond des modales ------------------------------------------------- */
+  --edt-scrim: rgba(6, 7, 10, .7);
+
+  /* ---- Typographie ----------------------------------------------------- */
+  --edt-font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', system-ui, sans-serif;
+  --edt-font-body:    'Instrument Sans Variable', 'Instrument Sans', system-ui, sans-serif;
+  --edt-font-mono:    ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ---- Alias courts (utilisés par les fichiers .html d'exemple) --------- */
+  --bg:  var(--edt-bg);        --s1: var(--edt-surface-1);  --s2: var(--edt-surface-2);
+  --s3:  var(--edt-surface-3); --ln: var(--edt-line);       --tx: var(--edt-text);
+  --mu:  var(--edt-muted);     --ac: var(--edt-accent);     --acs: var(--edt-accent-soft);
+  --ok:  var(--edt-ok);        --oks: var(--edt-ok-soft);
+}
+
+/* --------------------------------------------------------------------------
+   Thème clair — point de départ à valider visuellement (non maquetté).
+   À activer avec <html data-theme="light"> (ou via prefers-color-scheme).
+   -------------------------------------------------------------------------- */
+:root[data-theme="light"] {
+  --edt-bg: #F6F5F2;  --edt-surface-1: #FFFFFF;  --edt-surface-2: #F0EEE9;  --edt-surface-3: #E6E3DC;
+  --edt-line: #E4E2DC;
+  --edt-text: #17181C;  --edt-muted: #5E6270;
+  --edt-accent: #D9303A;  --edt-on-accent: #FFFFFF;  --edt-accent-text: #B3202B;  --edt-accent-hot: #C42632;
+  --edt-ok: #11592F;
+  --edt-sae-text: #11592F;  --edt-cm-text: #704800;  --edt-td-text: #8A360A;  --edt-tp-text: #1A4594;
+  --edt-y1-text: #1A4594;   --edt-y2-text: #704800;  --edt-y3-text: #5A2A96;
+  --edt-scrim: rgba(23, 24, 28, .45);
+}
