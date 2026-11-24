@@ -152,3 +152,34 @@ fn reads_regenerated_pdfs() {
         assert!(!is_group, "groupe pris pour un enseignant : {teacher}");
     }
 }
+
+/// Deux cases peintes l'une sur l'autre (un TD de G2 pendant un contrôle G2/G3,
+/// dans le planning source) : chacune garde ses propres lignes.
+const A1_S9_REGENERE: &[u8] = include_bytes!("fixtures/A1_S9_regenere.pdf");
+
+#[test]
+fn keeps_the_text_of_overlapping_boxes_apart() {
+    let timetable = pdf::parse(A1_S9_REGENERE, 1, 9).expect("PDF analysable");
+
+    let check = timetable
+        .courses
+        .iter()
+        .find(|c| {
+            c.day == "MARDI"
+                && c.start.to_string() == "10:00"
+                && c.kind == CourseKind::Controle
+                && c.groups.iter().any(|g| g == "G2")
+        })
+        .expect("contrôle G2/G3");
+    assert_eq!(check.groups, ["G2", "G3"]);
+    assert_eq!(check.teacher.as_deref(), Some("Dubreuil L."));
+    assert_eq!(check.room.as_deref(), Some("R46"));
+
+    let practical = timetable
+        .courses
+        .iter()
+        .find(|c| c.day == "MARDI" && c.start.to_string() == "10:00" && c.kind == CourseKind::Td)
+        .expect("TD de G2");
+    assert_eq!(practical.title, None);
+    assert_eq!(practical.room, None, "« . » veut dire : pas de salle");
+}

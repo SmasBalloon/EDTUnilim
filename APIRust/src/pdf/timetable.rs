@@ -75,11 +75,17 @@ fn assign_texts<'a>(
             .filter(|(_, (area, _))| anchor.x >= area.rect.x0 && anchor.x <= area.rect.x1)
             .filter_map(|(index, (area, _))| {
                 let gap = area.rect.vertical_span().distance_to(anchor.y);
-                (gap <= overflow).then_some((index, gap, area.rect.x0))
+                // Distance au bord haut (dans le sens de lecture) : le texte d'un
+                // bloc commence en haut de sa case. Quand deux cases se chevauchent
+                // (un conflit dans le planning source), c'est ce qui rend à chacune
+                // ses lignes au lieu de tout donner à la dernière peinte.
+                let top = if grid.reading_sign > 0.0 { area.rect.y0 } else { area.rect.y1 };
+                let from_top = ((anchor.y - top) * grid.reading_sign).abs();
+                (gap <= overflow).then_some((index, gap, area.rect.x0, from_top))
             })
-            .max_by(|a, b| a.2.total_cmp(&b.2).then(b.1.total_cmp(&a.1)));
+            .max_by(|a, b| a.2.total_cmp(&b.2).then(b.1.total_cmp(&a.1)).then(b.3.total_cmp(&a.3)));
 
-        if let Some((index, _, _)) = owner {
+        if let Some((index, ..)) = owner {
             blocks[index].push((anchor.y * grid.reading_sign, text));
         }
     }
@@ -131,7 +137,8 @@ fn build_course(
         resource: block.code.map(|code| Resource { name: catalog::name_of(&code).map(str::to_owned), code }),
         teacher: teacher.as_ref().map(|named| named.name.clone()),
         teacher_id: teacher.map(|named| named.id),
-        room: block.room,
+        // Un point seul est la façon dont le PDF écrit « pas de salle ».
+        room: block.room.filter(|room| !room.trim_matches('.').is_empty()),
     })
 }
 
