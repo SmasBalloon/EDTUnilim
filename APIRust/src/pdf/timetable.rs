@@ -299,11 +299,20 @@ fn is_initials(text: &str) -> bool {
 fn tidy_title(title: &str, code: Option<&str>) -> Option<String> {
     let title = restore_apostrophes(title.trim());
     if let Some(official) = code.and_then(catalog::name_of) {
-        let printed = teachers::fold(title.trim_end_matches("..."));
-        let raw = official;
-        let official = teachers::fold(official);
-        let mangled = if title.ends_with("...") { official.contains(&printed) } else { official == printed };
-        if !printed.is_empty() && mangled && title != raw {
+        let official_key = teachers::fold(official);
+        // `Program... avancee` : le générateur coupe où il veut, parfois au milieu.
+        // Chaque morceau restant doit se retrouver, dans l'ordre, dans le nom officiel.
+        let mangled = if title.contains("...") {
+            let mut from = 0;
+            title
+                .split("...")
+                .map(teachers::fold)
+                .filter(|part| !part.is_empty())
+                .all(|part| official_key[from..].find(&part).map(|at| from += at + part.len()).is_some())
+        } else {
+            official_key == teachers::fold(&title)
+        };
+        if mangled && title != official {
             return None;
         }
     }
@@ -395,6 +404,7 @@ mod tests {
         assert_eq!(tidy_title("Initiation au developpement", Some("R1.01")), None);
         assert_eq!(tidy_title("Initiation au devel...", Some("R1.01")), None);
         assert_eq!(tidy_title("Architecture des ordinate...", Some("R1.03")), None);
+        assert_eq!(tidy_title("Program... avancee", Some("R5A.05")), None);
         // Un intitulé court, propre au département, est conservé.
         assert_eq!(tidy_title("Organisations", Some("R1.08")).as_deref(), Some("Organisations"));
         assert_eq!(tidy_title("Systemes d,information", None).as_deref(), Some("Systemes d'information"));
