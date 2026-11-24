@@ -121,3 +121,34 @@ fn finds_no_room_conflict_in_real_weeks() {
         assert!(conflicts::find(&timetables).is_empty());
     }
 }
+
+/// Depuis novembre 2026 le département régénère les PDF à partir des ICS : les
+/// amphis n'y portent plus que les initiales de l'enseignant, les intitulés
+/// perdent leurs accents, et les SAÉ nomment parfois le groupe à la place de
+/// l'enseignant.
+const A2_S8_REGENERE: &[u8] = include_bytes!("fixtures/A2_S8_regenere.pdf");
+
+#[test]
+fn reads_regenerated_pdfs() {
+    let timetable = pdf::parse(A2_S8_REGENERE, 2, 8).expect("PDF analysable");
+    assert_eq!(timetable.period.week_number, Some(43));
+    assert_eq!(timetable.period.start.to_string(), "2026-10-19");
+
+    let amphi = find(&timetable.courses, "LUNDI", "10:00", "G4");
+    assert_eq!(amphi.kind, CourseKind::Amphi);
+    assert_eq!(amphi.teacher.as_deref(), Some("Simonne G."));
+    assert_eq!(amphi.room.as_deref(), Some("R46"));
+    assert_eq!(amphi.title.as_deref(), Some("Droit du numerique"));
+
+    // Le titre abîmé disparaît : l'interface reprend celui du référentiel.
+    let amphi = find(&timetable.courses, "MERCREDI", "10:00", "G4");
+    assert_eq!(amphi.title, None);
+    assert_eq!(amphi.resource.as_ref().and_then(|r| r.name.as_deref()), Some("Qualité de développement"));
+
+    for course in &timetable.courses {
+        let teacher = course.teacher.as_deref().unwrap_or("");
+        let is_group =
+            teacher.strip_prefix('G').is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()));
+        assert!(!is_group, "groupe pris pour un enseignant : {teacher}");
+    }
+}

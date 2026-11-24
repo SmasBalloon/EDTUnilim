@@ -59,7 +59,7 @@ impl Registry {
     fn resolve(&self, printed: &str) -> Option<Named> {
         let printed = printed.trim();
         let key = fold(printed);
-        if key.is_empty() || self.ignored.contains(&key) {
+        if key.len() <= 1 || is_group_label(&key) || self.ignored.contains(&key) {
             return None;
         }
         match self.by_key.get(&key) {
@@ -151,8 +151,15 @@ fn initials_of(name: &str) -> Option<String> {
 
 /// Replie une écriture pour la comparaison : sans casse, sans accents, sans
 /// ponctuation ni espaces. `Mérillou N.` et `merillou n` se rejoignent.
-fn fold(text: &str) -> String {
+pub(crate) fn fold(text: &str) -> String {
     text.chars().filter_map(simplify).collect()
+}
+
+/// `g7`, `g2a` : les PDF régénérés posent le groupe là où l'enseignant manque.
+fn is_group_label(key: &str) -> bool {
+    let Some(rest) = key.strip_prefix('g') else { return false };
+    let digits = rest.strip_suffix(['a', 'b']).unwrap_or(rest);
+    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
 }
 
 /// Identifiant lisible dans une URL : `Dubreuil L.` → `dubreuil-l`.

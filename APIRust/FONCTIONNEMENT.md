@@ -200,9 +200,18 @@ Chaque rectangle coloré devient un cours.
   Les lignes sont ensuite interprétées : une petite case tient sur une ligne
   (`R1.10 - JP - R52`) ; une grande s'étale en code + intitulé, éventuellement
   poursuivi, puis enseignant (une ligne contenant une espace et finissant par un
-  point) et salle (court jeton alphanumérique). Le générateur répète le code
-  avant de l'introduire par un tiret (`R1.03 R1.03 - Architecture des`), ce que
-  `split_head` absorbe.
+  point, ou des initiales seules : 2 à 4 majuscules) et salle (court jeton
+  alphanumérique). Le générateur répète le code avant de l'introduire par un
+  tiret (`R1.03 R1.03 - Architecture des`), ce que `split_head` absorbe.
+  Depuis novembre 2026 les PDF sont régénérés à partir des ICS du département
+  (« Régénéré à partir des ICS » dans l'en-tête) : les amphis tiennent sur trois
+  lignes (`R1.01 - Initiation au developpement`, `CO`, `AC`), les intitulés
+  n'ont plus d'accents, sont parfois tronqués (`ordinate...`) et notent
+  l'apostrophe par une virgule. `tidy_title` rétablit l'apostrophe et écarte
+  l'intitulé quand il n'est que la version abîmée du nom officiel de la
+  ressource, pour que l'interface reprenne ce dernier. Dans les SAÉ, le champ
+  enseignant contient souvent un groupe (`G7`, `G2A`) ou une lettre isolée :
+  `teachers::resolve` n'y voit personne.
 - **Référentiel** — le code trouvé (`R1.01`, `S3.01A`, `R5A.07`, `R4.Real.08`)
   est cherché dans `data/resources.csv`, embarqué dans le binaire par
   `include_str!` et analysé une seule fois (`OnceLock`). L'intitulé officiel

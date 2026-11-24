@@ -127,8 +127,8 @@ fn build_course(
         duration_minutes: end.minutes() - start.minutes(),
         kind,
         groups,
+        title: block.title.and_then(|title| tidy_title(&title, block.code.as_deref())),
         resource: block.code.map(|code| Resource { name: catalog::name_of(&code).map(str::to_owned), code }),
-        title: block.title,
         teacher: teacher.as_ref().map(|named| named.name.clone()),
         teacher_id: teacher.map(|named| named.id),
         room: block.room,
@@ -274,8 +274,52 @@ fn looks_like_room(text: &str) -> bool {
         && text.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
 }
 
+/// `Dubreuil L.` (grandes cases) ou des initiales seules, `LD` / `FSR` (les PDF
+/// régénérés à partir des ICS n'écrivent plus que celles-ci).
 fn looks_like_teacher(text: &str) -> bool {
-    text.ends_with('.') && text.contains(char::is_whitespace)
+    (text.ends_with('.') && text.contains(char::is_whitespace)) || is_initials(text)
+}
+
+fn is_initials(text: &str) -> bool {
+    (2..=4).contains(&text.len()) && text.bytes().all(|b| b.is_ascii_uppercase())
+}
+
+/// Les PDF régénérés écrivent les intitulés sans accents, parfois tronqués
+/// (`Qualite de developpem...`) et avec une virgule pour apostrophe
+/// (`Systemes d,information`). Quand seul le référentiel est ainsi abîmé, on
+/// laisse l'intitulé de côté : l'interface affiche alors celui du référentiel,
+/// accentué et complet.
+fn tidy_title(title: &str, code: Option<&str>) -> Option<String> {
+    let title = restore_apostrophes(title.trim());
+    if let Some(official) = code.and_then(catalog::name_of) {
+        let printed = teachers::fold(title.trim_end_matches("..."));
+        let raw = official;
+        let official = teachers::fold(official);
+        let mangled = if title.ends_with("...") { official.contains(&printed) } else { official == printed };
+        if !printed.is_empty() && mangled && title != raw {
+            return None;
+        }
+    }
+    (!title.is_empty()).then_some(title)
+}
+
+/// `d,information` → `d'information` : une virgule entre deux lettres n'en est pas une.
+fn restore_apostrophes(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    chars
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| {
+            let between_letters = i > 0
+                && chars[i - 1].is_alphabetic()
+                && chars.get(i + 1).is_some_and(|next| next.is_alphabetic());
+            if c == ',' && between_letters {
+                '\''
+            } else {
+                c
+            }
+        })
+        .collect()
 }
 
 /// Lit l'en-tête : `… Semaine 1 (36) : du 31/08/2026 au 05/09/2026 …`.
@@ -328,6 +372,25 @@ mod tests {
         assert_eq!(block.title.as_deref(), Some("Architecture des ordinateurs"));
         assert_eq!(block.teacher.as_deref(), Some("Monédière T."));
         assert_eq!(block.room.as_deref(), Some("AC"));
+    }
+
+    #[test]
+    fn parses_regenerated_lecture_block() {
+        let block = parse_block(&["R1.01 - Initiation au developpement", "CO", "AC"]);
+        assert_eq!(block.code.as_deref(), Some("R1.01"));
+        assert_eq!(block.title.as_deref(), Some("Initiation au developpement"));
+        assert_eq!(block.teacher.as_deref(), Some("CO"));
+        assert_eq!(block.room.as_deref(), Some("AC"));
+    }
+
+    #[test]
+    fn drops_titles_that_only_mangle_the_official_name() {
+        assert_eq!(tidy_title("Initiation au developpement", Some("R1.01")), None);
+        assert_eq!(tidy_title("Initiation au devel...", Some("R1.01")), None);
+        assert_eq!(tidy_title("Architecture des ordinate...", Some("R1.03")), None);
+        // Un intitulé court, propre au département, est conservé.
+        assert_eq!(tidy_title("Organisations", Some("R1.08")).as_deref(), Some("Organisations"));
+        assert_eq!(tidy_title("Systemes d,information", None).as_deref(), Some("Systemes d'information"));
     }
 
     #[test]
